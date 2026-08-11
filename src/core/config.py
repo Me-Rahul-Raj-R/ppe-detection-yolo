@@ -19,7 +19,7 @@ MQTT_USE_TLS  = os.getenv("MQTT_USE_TLS", "false").lower() == "true"
 # ── Model ─────────────────────────────────────────────────────────────────────
 DEFAULT_MODEL_PATH  = os.getenv(
     "MODEL_PATH",
-    "best.pt" if os.path.exists("best.pt") else "models/best.pt"
+    "models/best.pt" if os.path.exists("models/best.pt") else "best.pt"
 )
 FALLBACK_MODEL_PATH = "models/yolo11n.pt"
 DETECTION_CONF      = float(os.getenv("DETECTION_CONF", "0.20"))
