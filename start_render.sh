@@ -27,6 +27,10 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
+# Give backend and frontend services time to initialize ports
+echo "Waiting for internal services to initialize..."
+sleep 3
+
 # Start Nginx in foreground
 echo "Starting Nginx Reverse Proxy on port ${PORT}..."
 nginx -g 'daemon off;'
