@@ -26,6 +26,10 @@ runs/
 # Database evidence & sensitive files
 database/evidence/*
 !database/evidence/.gitkeep
+database/*.db
+database/*.sqlite
+*.db
+*.sqlite
 cookies.txt
 *.log
 
