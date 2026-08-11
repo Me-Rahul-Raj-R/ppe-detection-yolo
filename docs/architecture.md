@@ -1,60 +1,31 @@
-# EdgeVision Platform Architecture Documentation
+# EdgeVision System Architecture Documentation
 
-## 1. System Architecture
+The **EdgeVision PPE Compliance and Work-at-Height Platform** is built as an industrial-grade edge computer vision system utilizing Python FastAPI, Ultralytics YOLOv8, ByteTrack, MongoDB, and React (Vite / TanStack).
 
-The EdgeVision platform combines a multi-stage YOLOv8 computer vision pipeline with a FastAPI backend server, MongoDB Atlas database, Mosquitto MQTT broker, and a TanStack Router React dashboard frontend.
+---
+
+## 🏗️ End-to-End Pipeline Architecture
 
 ```mermaid
-flowchart TD
-    Cam[Video Stream / Webcam / YouTube] --> Dec[OpenCV Video Capture]
-    Dec --> Enh[Industrial Image Enhancer]
-    Enh --> Yolo[Stage 1+2: YOLOv8 & ByteTrack]
-    Yolo --> Assoc[Stage 3: Person-to-PPE Association]
-    Assoc --> Rules[Stage 4: Zone Rule Engine]
-    Rules --> Temp[Stage 5: Temporal Validator]
-    
-    Temp -- New Alert --> DB[(MongoDB Atlas)]
-    Temp -- Evidence --> Store[database/evidence (JPG & MP4)]
-    Temp -- MQTT Event --> Broker[Mosquitto MQTT Broker]
-    
-    FastAPI[FastAPI Server] <--> DB
-    FastAPI <--> WS[WebSocket Streaming /ws]
-    WS <--> UI[React + Vite Frontend]
+flowchart LR
+    A[Camera Feed / RTSP / Video] --> B[Threaded Camera Frame Grabber]
+    B --> C[Stage 1: Person Tracking - ByteTrack]
+    C --> D[Stage 2: PPE Detection - YOLOv8]
+    D --> E[Stage 3: Spatial Association]
+    E --> F[Stage 4: Per-Zone Rule Engine]
+    F --> G[Stage 5: Temporal Validation]
+    G --> H[MongoDB & In-Memory Query Cache]
+    H --> I[FastAPI REST & WebSockets]
+    I --> J[React Executive Dashboard]
 ```
 
 ---
 
-## 2. Multi-Stage Computer Vision Pipeline
+## ⚙️ Core Pipeline Components
 
-1. **Stage 1: Person Detection & Tracking**
-   - Detects worker bounding boxes and tracks them across consecutive frames using ByteTrack. Assigns persistent tracking IDs (`Worker-101`).
-
-2. **Stage 2: Multi-Class PPE Detection**
-   - Identifies 7 safety equipment classes (`helmet`, `vest`, `boots`, `safety_belt`, `lanyard`, `hook`, `anchor_point`).
-
-3. **Stage 3: Person-to-PPE Association**
-   - Body-region containment mapping:
-     - Head region ($0-25\%$) $\rightarrow$ `helmet`
-     - Torso region ($20-75\%$) $\rightarrow$ `vest`, `safety_belt`, `lanyard`, `hook`
-     - Feet region ($65-100\%$) $\rightarrow$ `boots`
-
-4. **Stage 4: Zone-based Rule Engine**
-   - Evaluates worker equipment against dynamic zone safety requirements:
-     - **General Plant**: Helmet + Vest
-     - **Construction**: Helmet + Vest + Boots
-     - **Work at Height**: Helmet + Vest + Boots + Safety Belt + Hook
-     - **Restricted Machinery**: Authorised Worker Check + Helmet + Vest
-
-5. **Stage 5: Temporal Validator & Debouncer**
-   - Requires violation hits in $8 / 10$ sliding window frames and minimum $2.0\text{s}$ zone duration before triggering an alert. Suppresses duplicate ongoing alerts.
-
----
-
-## 3. Database Schema Design (MongoDB)
-
-- `violation_events`: Incident evidence records (id, zone_id, worker_track_id, detected_ppe, missing_ppe, confidence, timestamp, image_base64, video_path, acknowledgement_status).
-- `cameras`: Video stream configuration (id, name, source, zone_id, target_fps, status).
-- `zones`: Configured safety zones & required PPE sets.
-- `users` & `roles`: User accounts and permission roles.
-- `audit_logs`: Event audit trails.
-- `alert_deliveries`: Dispatch log for MQTT and webhook alerts.
+1. **Threaded Camera (`ThreadedCamera`)**: Non-blocking frame reader with thread-safe lock protection (`cap_lock`) to handle HTTP progressive YouTube streams and RTSP feeds without decoder crash.
+2. **Vision Pipeline (`VisionPipeline`)**: Asynchronous multi-stage frame processing pipeline running YOLOv8 detection, person tracking, and PPE association.
+3. **Rule Engine (`RuleEngine`)**: Dynamic per-zone rule validator matching required safety equipment (`helmet`, `vest`, `boots`, `safety_belt`, `hook`) against tracked workers.
+4. **Temporal Validator (`TemporalValidator`)**: Noise suppression engine enforcing 8/10 frame validation, minimum 2-second dwell time, and 60% confidence floor before raising alerts.
+5. **MongoDB Persistence & Query Cache (`db.py` & `mongo_cache`)**: Fast database layer with tag-based invalidation for instant dashboard metric updates.
+6. **Frontend Executive Dashboard (`React + TanStack Router`)**: Dark industrial panel UI providing real-time live monitoring, triage workflow, camera management, zone rule configuration, and telemetry reporting.

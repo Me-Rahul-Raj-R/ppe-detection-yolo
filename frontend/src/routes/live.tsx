@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
-import { AlertTriangle, Camera, HardHat, ShieldCheck, Activity, Grid, Maximize2, Play, CheckCircle2, Radio } from "lucide-react";
+import { AlertTriangle, Camera, HardHat, ShieldCheck, Activity, Grid, Maximize2, Play, Pause, RotateCcw, RotateCw, CheckCircle2, Radio } from "lucide-react";
 
 import { AppShell, PageHeader, StatusDot } from "@/components/app-shell";
+import { zoneLabel } from "@/lib/mock-data";
 import { useSessionFetch } from "@/hooks/use-session-fetch";
 
 export const Route = createFileRoute("/live")({
@@ -37,12 +38,29 @@ type CameraItem = {
   latencyMs: number;
   status: "online" | "offline";
   streamUrl: string;
+  type?: string;
 };
+
+type PlaybackInfo = {
+  is_seekable: boolean;
+  is_paused: boolean;
+  current_time: number;
+  duration: number;
+  source: string;
+};
+
+function formatSeconds(sec: number): string {
+  if (!sec || isNaN(sec) || sec < 0) return "00:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 function LivePage() {
   const [frames, setFrames] = useState<Record<string, string>>({});
   const [workers, setWorkers] = useState<WorkerState[]>([]);
   const [fpsMap, setFpsMap] = useState<Record<string, number>>({});
+  const [playbackMap, setPlaybackMap] = useState<Record<string, PlaybackInfo>>({});
   const [zone, setZone] = useState<string>("");
   const [wsStatus, setWsStatus] = useState<"offline" | "online" | "connecting">("connecting");
 
@@ -58,6 +76,8 @@ function LivePage() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const { data: cameraList, refetch: fetchCameras } = useSessionFetch<CameraItem[]>("/api/cameras", []);
+  const { data: zoneData } = useSessionFetch<any>("/api/zones", { db_zones: [] });
+  const availableZones = zoneData?.db_zones || [];
 
   // Set default selected camera once we have cameras
   useEffect(() => {
@@ -99,6 +119,7 @@ function LivePage() {
           if (d.camera_id) {
             if (d.frame) setFrames(prev => ({ ...prev, [d.camera_id]: d.frame }));
             if (d.fps !== undefined) setFpsMap(prev => ({ ...prev, [d.camera_id]: d.fps }));
+            if (d.playback) setPlaybackMap(prev => ({ ...prev, [d.camera_id]: d.playback }));
           }
           
           if (d.camera_id === selectedCamIdRef.current) {
@@ -119,7 +140,24 @@ function LivePage() {
       .catch((err) => console.error("Failed to activate camera", err));
   };
 
+  const handleControl = async (camId: string, action: string, value: number = 0) => {
+    try {
+      const res = await fetch(`/api/cameras/${camId}/controls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, value }),
+      });
+      const data = await res.json();
+      if (data.playback) {
+        setPlaybackMap(prev => ({ ...prev, [camId]: data.playback }));
+      }
+    } catch (err) {
+      console.error("Control error:", err);
+    }
+  };
+
   const selectedCam = cameraList.find((c) => c.id === selectedCamId) || cameraList[0];
+  const currentPlayback = selectedCam?.id ? playbackMap[selectedCam.id] : undefined;
   const compliantCount = workers.filter((w) => w.compliant).length;
   const violationCount = workers.filter((w) => !w.compliant).length;
 
@@ -208,7 +246,7 @@ function LivePage() {
                       {/* Overlaid Badges */}
                       <div className="absolute top-2 left-2 flex items-center gap-1.5">
                         <span className="rounded bg-background/80 px-2 py-0.5 text-[10px] telemetry font-mono backdrop-blur border border-border">
-                          {cam.zoneId}
+                          {zoneLabel(cam.zoneId, availableZones)}
                         </span>
                         {isLive && (
                           <span className="flex items-center gap-1 rounded bg-success/20 text-success px-2 py-0.5 text-[10px] font-semibold backdrop-blur border border-success/30">
@@ -292,7 +330,7 @@ function LivePage() {
               )}
 
               {/* Overlaid Telemetry Metrics */}
-              <div className="absolute left-3 top-3 flex items-center gap-2">
+              <div className="absolute left-3 top-3 flex items-center gap-2 z-10">
                 <div className="flex items-center gap-1.5 rounded bg-background/80 px-2.5 py-1 text-xs text-primary backdrop-blur border border-primary/30">
                   <Activity className="size-3.5 animate-pulse text-primary" />
                   <span className="telemetry font-mono font-semibold">{(selectedCam?.id ? (fpsMap[selectedCam.id] || 0) : 0).toFixed(1)} FPS</span>
@@ -307,6 +345,84 @@ function LivePage() {
                     {selectedCam.name} ({selectedCam.id})
                   </div>
                 )}
+              </div>
+
+              {/* Video Playback Controls Overlay (Play, Pause, -5s, +5s, Seek Scrubber, Restart) */}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent p-3 backdrop-blur-sm flex flex-col gap-2 z-10">
+                {/* Timeline Progress Scrubber */}
+                {currentPlayback?.is_seekable && (
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-[11px] font-mono text-cyan-400 font-semibold min-w-[38px]">
+                      {formatSeconds(currentPlayback.current_time)}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={currentPlayback.duration > 0 ? currentPlayback.duration : 100}
+                      step={0.5}
+                      value={currentPlayback.current_time || 0}
+                      onChange={(e) => selectedCam?.id && handleControl(selectedCam.id, "seek", parseFloat(e.target.value))}
+                      className="flex-1 h-1.5 bg-secondary/80 rounded-lg appearance-none cursor-pointer accent-cyan-400 hover:accent-cyan-300 transition-all"
+                    />
+                    <span className="text-[11px] font-mono text-muted-foreground min-w-[38px] text-right">
+                      {formatSeconds(currentPlayback.duration)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Control Action Buttons */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {/* Play / Pause Toggle */}
+                    <button
+                      onClick={() => selectedCam?.id && handleControl(selectedCam.id, "toggle")}
+                      className="flex items-center justify-center size-8 rounded bg-primary/20 hover:bg-primary text-primary hover:text-primary-foreground transition border border-primary/40 shadow-sm"
+                      title={currentPlayback?.is_paused ? "Play Video" : "Pause Video"}
+                    >
+                      {currentPlayback?.is_paused ? <Play className="size-4 fill-current ml-0.5" /> : <Pause className="size-4 fill-current" />}
+                    </button>
+
+                    {/* Skip -5 Seconds */}
+                    <button
+                      onClick={() => selectedCam?.id && handleControl(selectedCam.id, "skip", -5)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-secondary/90 hover:bg-secondary text-xs text-foreground transition border border-border/80 shadow-sm"
+                      title="Rewind 5 seconds"
+                    >
+                      <RotateCcw className="size-3.5 text-cyan-400" />
+                      <span className="font-mono text-[11px] font-semibold">-5s</span>
+                    </button>
+
+                    {/* Skip +5 Seconds */}
+                    <button
+                      onClick={() => selectedCam?.id && handleControl(selectedCam.id, "skip", 5)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-secondary/90 hover:bg-secondary text-xs text-foreground transition border border-border/80 shadow-sm"
+                      title="Skip forward 5 seconds"
+                    >
+                      <RotateCw className="size-3.5 text-cyan-400" />
+                      <span className="font-mono text-[11px] font-semibold">+5s</span>
+                    </button>
+
+                    {/* Restart / Reset to 0s */}
+                    <button
+                      onClick={() => selectedCam?.id && handleControl(selectedCam.id, "restart")}
+                      className="flex items-center gap-1 px-2 py-1 rounded bg-secondary/70 hover:bg-secondary text-xs text-muted-foreground hover:text-foreground transition border border-border/60"
+                      title="Restart video from 00:00"
+                    >
+                      <span className="font-mono text-[10px] font-bold tracking-wider">RESTART</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {currentPlayback?.is_paused && (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold tracking-wider uppercase border border-amber-500/40 animate-pulse">
+                        PAUSED
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+                      {selectedCam?.type === "youtube" || selectedCam?.streamUrl?.includes("youtube") ? "YOUTUBE VIDEO FEED" : "LIVE STREAM"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 

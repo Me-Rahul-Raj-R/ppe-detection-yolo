@@ -24,23 +24,33 @@ from src.core import config
 POSITIVE_PPE: set[str] = {
     "Hard_hat", "Vest", "Glove", "Boots", "Glass", "Ear-Protection", "Mask",
     "Circular_Saw", "Fire_Extinguisher", "Fire_prevention_Net", "Welding_Equipment",
-    "helmet", "vest", "gloves", "boots", "goggles", "ear-mufs", "face-guard", "safety-suit",
+    "helmet", "vest", "gloves", "glove", "boots", "glass", "goggles", "ear-mufs",
+    "ear_protection", "mask", "face-guard", "safety-suit", "lanyard", "lanyard_good", "harness", "safety_belt",
 }
 
 # Negative classes map to their positive counterpart
 NEGATIVE_TO_POSITIVE: dict[str, str] = {
     "No-Helmet":         "Hard_hat",
     "no-helmet":         "helmet",
+    "no_helmet":         "helmet",
     "No-Vest":           "Vest",
     "no-vest":           "vest",
+    "no_vest":           "vest",
     "No-Glove":          "Glove",
     "no-gloves":         "gloves",
+    "no_glove":          "glove",
     "No-Boots":          "Boots",
     "no-boots":          "boots",
+    "no_boots":          "boots",
     "No-Glass":          "Glass",
     "no-goggles":        "goggles",
+    "no_glass":          "glass",
     "No-Ear-Protection": "Ear-Protection",
+    "no-ear-protection": "ear_protection",
     "No-Mask":           "Mask",
+    "no_lanyard":        "lanyard",
+    "lanyard_bad":       "lanyard",
+    "no_harness":        "harness",
 }
 
 
@@ -185,7 +195,7 @@ class WorkerReIDGallery:
     Visual feature gallery to re-identify workers who exit and re-enter the scene
     after long periods (e.g. 5–30 minutes). Maintains spatial color signatures per worker ID.
     """
-    def __init__(self, ttl_seconds: float = 1800.0, match_threshold: float = 0.68) -> None:
+    def __init__(self, ttl_seconds: float = 1800.0, match_threshold: float = 0.85) -> None:
         self.ttl_seconds = ttl_seconds
         self.match_threshold = match_threshold
         self._signatures: dict[int, dict] = {}  # worker_id -> {"sig": np.ndarray, "last_seen": float}

@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, X, ShieldAlert, Loader2 } from "lucide-react";
+import { Plus, X, ShieldAlert, Loader2, Trash2, Edit2 } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { PPE_LABELS, type PpeKey, type Zone } from "@/lib/mock-data";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { PPE_LABELS, zoneLabel, type PpeKey, type Zone } from "@/lib/mock-data";
 import { useSessionFetch, invalidateSessionCache } from "@/hooks/use-session-fetch";
 import { useToast } from "@/lib/toast-context";
 import { useAppData } from "@/lib/data-context";
@@ -197,6 +198,72 @@ function ZonesPage() {
       .finally(() => setSavingZoneId(null));
   };
 
+  const [deletingZoneId, setDeletingZoneId] = useState<string | null>(null);
+  const [confirmDeleteZone, setConfirmDeleteZone] = useState<Zone | null>(null);
+  const [editingZone, setEditingZone] = useState<Zone | null>(null);
+  const [submittingEditZone, setSubmittingEditZone] = useState(false);
+
+  const executeDeleteZone = () => {
+    if (!confirmDeleteZone) return;
+    const targetId = confirmDeleteZone.id;
+    setDeletingZoneId(targetId);
+    fetch(`/api/zones/${encodeURIComponent(targetId)}`, {
+      method: "DELETE",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to delete zone");
+        invalidateSessionCache("/api/zones");
+        return fetchZones(true);
+      })
+      .then(() => {
+        setZones((prev) => prev.filter((z) => z.id !== targetId));
+        refetchAll();
+        showToast(`Safety zone '${zoneLabel(targetId)}' deleted successfully`);
+      })
+      .catch((err) => {
+        console.error("Failed to delete zone", err);
+        showToast("Failed to delete safety zone");
+      })
+      .finally(() => {
+        setDeletingZoneId(null);
+        setConfirmDeleteZone(null);
+      });
+  };
+
+  const handleSaveEditZone = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingZone || !editingZone.name.trim()) return;
+
+    setSubmittingEditZone(true);
+    const requiredPpe = CONFIGURABLE_PPE.filter((k) => editingZone.required[k]);
+
+    fetch("/api/zones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingZone.id,
+        name: editingZone.name.trim(),
+        description: editingZone.kind || editingZone.description,
+        required_ppe: requiredPpe,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to update zone");
+        invalidateSessionCache("/api/zones");
+        return fetchZones(true);
+      })
+      .then(() => {
+        refetchAll();
+        setEditingZone(null);
+        showToast(`Safety zone '${editingZone.name}' updated successfully`);
+      })
+      .catch((err) => {
+        console.error("Failed to update zone", err);
+        showToast("Failed to update safety zone");
+      })
+      .finally(() => setSubmittingEditZone(false));
+  };
+
   return (
     <AppShell>
       <PageHeader
@@ -231,14 +298,31 @@ function ZonesPage() {
               <div className="px-4 pb-4 pt-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="display-title text-lg">{z.name}</h2>
+                    <h2 className="display-title text-lg uppercase">{zoneLabel(z.name || z.id)}</h2>
                     <p className="telemetry text-[11px] text-muted-foreground">
-                      {z.id} · {z.kind}
+                      {zoneLabel(z.id)} · {z.kind || z.description || "Active Zone"}
                     </p>
                   </div>
-                  <span className="display-title rounded-sm bg-accent px-2 py-0.5 text-[10px] text-accent-foreground">
-                    {CONFIGURABLE_PPE.filter((k) => z.required[k]).length} rules active
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="display-title rounded-sm bg-accent px-2 py-0.5 text-[10px] text-accent-foreground">
+                      {CONFIGURABLE_PPE.filter((k) => z.required[k]).length} rules active
+                    </span>
+                    <button
+                      onClick={() => setEditingZone({ ...z })}
+                      title="Edit Zone Settings & Rules"
+                      className="rounded border border-primary/30 bg-primary/10 p-1 text-primary hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                    >
+                      <Edit2 className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteZone(z)}
+                      disabled={deletingZoneId === z.id}
+                      title="Delete Safety Zone"
+                      className="rounded border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {deletingZoneId === z.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -433,6 +517,107 @@ function ZonesPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Zone Themed Modal */}
+      {editingZone && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-lg border border-border panel-surface shadow-2xl">
+            <div className="hazard-stripe h-1.5 w-full bg-primary" />
+            <div className="flex items-center justify-between border-b border-border/80 px-5 py-4 bg-background/50">
+              <div className="flex items-center gap-2">
+                <Edit2 className="size-4 text-primary" />
+                <h3 className="display-title text-base font-bold">Edit Safety Zone: {editingZone.name}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingZone(null)}
+                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditZone} className="p-5 space-y-4">
+              <div>
+                <label className="telemetry text-xs text-muted-foreground block mb-1">Zone Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editingZone.name}
+                  onChange={(e) => setEditingZone({ ...editingZone, name: e.target.value })}
+                  className="telemetry w-full rounded border border-input bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="telemetry text-xs text-muted-foreground block mb-1">Description / Category</label>
+                <input
+                  type="text"
+                  value={editingZone.kind || editingZone.description || ""}
+                  onChange={(e) => setEditingZone({ ...editingZone, kind: e.target.value, description: e.target.value })}
+                  className="telemetry w-full rounded border border-input bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="telemetry text-xs text-muted-foreground block mb-2 font-semibold">Enforced PPE Safety Rules</label>
+                <div className="grid gap-2 sm:grid-cols-2 max-h-48 overflow-y-auto pr-1">
+                  {CONFIGURABLE_PPE.map((k) => (
+                    <label
+                      key={k}
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded border border-border bg-background/40 px-3 py-2 text-xs"
+                    >
+                      <span>{PPE_LABELS[k]}</span>
+                      <input
+                        type="checkbox"
+                        checked={!!editingZone.required[k]}
+                        onChange={(e) =>
+                          setEditingZone({
+                            ...editingZone,
+                            required: { ...editingZone.required, [k]: e.target.checked },
+                          })
+                        }
+                        className="rounded border-border bg-background text-primary focus:ring-primary size-4"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-4 border-t border-border/80">
+                <button
+                  type="button"
+                  onClick={() => setEditingZone(null)}
+                  className="rounded border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEditZone}
+                  className="flex items-center gap-1.5 rounded bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {submittingEditZone ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  <span>{submittingEditZone ? "Saving..." : "Update Zone Rules"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Themed Confirm Modal for Deleting Zone */}
+      <ConfirmModal
+        isOpen={!!confirmDeleteZone}
+        title={`Delete Zone: ${confirmDeleteZone ? zoneLabel(confirmDeleteZone.name || confirmDeleteZone.id) : ""}`}
+        message={`Are you sure you want to delete safety zone '${confirmDeleteZone?.name || confirmDeleteZone?.id}'? This will purge its rules from MongoDB.`}
+        confirmText="Delete Safety Zone"
+        cancelText="Keep Zone"
+        variant="danger"
+        isLoading={deletingZoneId !== null}
+        onConfirm={executeDeleteZone}
+        onCancel={() => setConfirmDeleteZone(null)}
+      />
     </AppShell>
   );
 }

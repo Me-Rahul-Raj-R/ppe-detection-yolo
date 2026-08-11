@@ -53,13 +53,5 @@
       "helmet",
       "vest"
     ]
-  },
-  {
-    "id": "ZONE-AE01",
-    "name": "Test Zone",
-    "description": "Custom Zone",
-    "required_ppe": [
-      "helmet"
-    ]
   }
 ]

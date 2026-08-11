@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { formatTime, type Worker, type ViolationEvent } from "@/lib/mock-data";
+import { formatTime, zoneLabel, type Worker, type ViolationEvent } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/compliance")({
   head: () => ({
@@ -119,7 +119,7 @@ function CompliancePage() {
                       <div className="telemetry text-[11px] text-muted-foreground">{w.id}</div>
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">{w.crew}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{w.primaryZone}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{zoneLabel(w.primaryZone)}</td>
                     <td className="telemetry px-3 py-2.5">{w.incidents}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ function CompliancePage() {
                     <li key={i.id} className="rounded border border-border bg-background/40 p-2.5">
                       <div className="text-sm">{i.type}</div>
                       <div className="telemetry mt-0.5 text-[11px] text-muted-foreground">
-                        {i.id} · {i.zoneId} · {formatTime(i.timestamp)}
+                        {i.id} · {zoneLabel(i.zoneId)} · {formatTime(i.timestamp)}
                       </div>
                     </li>
                   ))

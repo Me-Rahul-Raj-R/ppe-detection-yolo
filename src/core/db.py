@@ -60,9 +60,11 @@ def get_db():
         try:
             uri = config.MONGODB_URI
             kwargs = {
-                "serverSelectionTimeoutMS": 3000,
-                "connectTimeoutMS": 3000,
-                "socketTimeoutMS": 3000,
+                "serverSelectionTimeoutMS": 10000,
+                "connectTimeoutMS": 10000,
+                "socketTimeoutMS": 15000,
+                "maxPoolSize": 50,
+                "minPoolSize": 5,
             }
             if "mongodb+srv://" in uri or "tls=true" in uri.lower() or "ssl=true" in uri.lower():
                 kwargs.update({
@@ -88,11 +90,11 @@ async def ensure_db():
         if count_zones == 0:
             log.info("Seeding initial zones...")
             zones = [
-                {"id": "ZONE-01", "name": "general_plant", "description": "General plant area – basic PPE required", "required_ppe": ["helmet", "vest", "boots"], "authorised_workers": []},
-                {"id": "ZONE-02", "name": "construction", "description": "Construction area – helmet, vest and safety boots required", "required_ppe": ["helmet", "vest", "boots"], "authorised_workers": []},
-                {"id": "ZONE-03", "name": "work_at_height", "description": "Work at height platform – harness and hook required", "required_ppe": ["helmet", "vest", "boots", "safety_belt", "hook"], "authorised_workers": []},
-                {"id": "ZONE-04", "name": "restricted_machinery", "description": "Restricted machinery area – high hazard", "required_ppe": ["helmet", "vest", "goggles", "ear-mufs", "face-guard"], "authorised_workers": ["Worker-101", "Worker-102"]},
-                {"id": "ZONE-05", "name": "hazardous_material", "description": "Hazardous material handling zone", "required_ppe": ["helmet", "safety-suit", "boots", "gloves", "goggles"], "authorised_workers": []},
+                {"id": "general_plant", "name": "General Plant Floor", "description": "General plant area – basic PPE required", "required_ppe": ["helmet", "vest", "boots"], "authorised_workers": []},
+                {"id": "construction", "name": "Construction Area", "description": "Construction area – helmet, vest and safety boots required", "required_ppe": ["helmet", "vest", "boots"], "authorised_workers": []},
+                {"id": "work_at_height", "name": "Work at Height Platform", "description": "Work at height platform – harness and hook required", "required_ppe": ["helmet", "vest", "boots", "safety_belt", "hook"], "authorised_workers": []},
+                {"id": "restricted_machinery", "name": "Restricted Machinery Zone", "description": "Restricted machinery area – high hazard", "required_ppe": ["helmet", "vest", "goggles", "ear-mufs", "face-guard"], "authorised_workers": ["Worker-101", "Worker-102"]},
+                {"id": "hazardous_material", "name": "Hazardous Chemical Area", "description": "Hazardous material handling zone", "required_ppe": ["helmet", "safety-suit", "boots", "gloves", "goggles"], "authorised_workers": []},
             ]
             await db.zones.insert_many(zones)
 
@@ -371,11 +373,11 @@ async def get_violations(limit: int = 100) -> list[dict[str, Any]]:
     return res
 
 _DEFAULT_SEED_ZONES = [
-    {"id": "ZONE-01", "name": "general_plant", "description": "General plant area – basic PPE required", "required_ppe": ["helmet", "vest", "boots"]},
-    {"id": "ZONE-02", "name": "construction", "description": "Construction area – helmet, vest and safety boots required", "required_ppe": ["helmet", "vest", "boots"]},
-    {"id": "ZONE-03", "name": "work_at_height", "description": "Work at height platform – harness and hook required", "required_ppe": ["helmet", "vest", "boots", "safety_belt", "hook"]},
-    {"id": "ZONE-04", "name": "restricted_machinery", "description": "Restricted machinery area – high hazard", "required_ppe": ["helmet", "vest", "goggles", "ear-mufs", "face-guard"]},
-    {"id": "ZONE-05", "name": "hazardous_material", "description": "Hazardous material handling zone", "required_ppe": ["helmet", "safety-suit", "boots", "gloves", "goggles"]},
+    {"id": "general_plant", "name": "General Plant Floor", "description": "General plant area – basic PPE required", "required_ppe": ["helmet", "vest", "boots"]},
+    {"id": "construction", "name": "Construction Area", "description": "Construction area – helmet, vest and safety boots required", "required_ppe": ["helmet", "vest", "boots"]},
+    {"id": "work_at_height", "name": "Work at Height Platform", "description": "Work at height platform – harness and hook required", "required_ppe": ["helmet", "vest", "boots", "safety_belt", "hook"]},
+    {"id": "restricted_machinery", "name": "Restricted Machinery Zone", "description": "Restricted machinery area – high hazard", "required_ppe": ["helmet", "vest", "goggles", "ear-mufs", "face-guard"]},
+    {"id": "hazardous_material", "name": "Hazardous Chemical Area", "description": "Hazardous material handling zone", "required_ppe": ["helmet", "safety-suit", "boots", "gloves", "goggles"]},
 ]
 
 _MEM_ZONES: list[dict[str, Any]] = _load_fallback_json(ZONES_JSON, _DEFAULT_SEED_ZONES)
@@ -441,6 +443,20 @@ async def save_zone(zone_data: dict) -> bool:
         return True
     except Exception as e:
         log.warning("MongoDB save_zone offline: saved to local memory fallback (%s)", e)
+        return True
+
+async def delete_zone(zone_id: str) -> bool:
+    """Remove a safety zone configuration from DB and memory fallback."""
+    global _MEM_ZONES
+    _MEM_ZONES = [z for z in _MEM_ZONES if z.get("id") != zone_id and z.get("name") != zone_id]
+    _save_fallback_json(ZONES_JSON, _MEM_ZONES)
+    await mongo_cache.invalidate_tags(["zones", "stats"])
+    try:
+        db = get_db()
+        await db.zones.delete_many({"$or": [{"id": zone_id}, {"name": zone_id}]})
+        return True
+    except Exception as e:
+        log.error("Failed to delete zone %s: %s", zone_id, e)
         return True
 
 @cached(ttl=10.0, tags=["workers"])

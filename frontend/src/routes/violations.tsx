@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Check, ShieldAlert, Image as ImageIcon, Trash2, History as HistoryIcon, AlertTriangle, X, Eye, XCircle, CheckCircle2, Loader2, Filter, Search, RotateCcw } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { ppeLabel, formatTime, type ViolationEvent } from "@/lib/mock-data";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { ppeLabel, formatTime, zoneLabel, type ViolationEvent } from "@/lib/mock-data";
 import { useSessionFetch, invalidateSessionCache } from "@/hooks/use-session-fetch";
 import { useAppData } from "@/lib/data-context";
 import { useToast } from "@/lib/toast-context";
@@ -112,22 +113,35 @@ function Evidence({
 }
 
 function ViolationsPage() {
-  const { violations: ctxViolations, loading: ctxLoading, refetchViolations } = useAppData();
+  const { violations: ctxViolations, zones: ctxZones, loading: ctxLoading, refetchViolations } = useAppData();
   const { showToast } = useToast();
   const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
   const { data: fetchList, loading: fetchLoading, refetch: manualRefetch, mutate } = useSessionFetch<ExtendedViolationEvent[]>("/api/violations", []);
+  const { data: zoneData } = useSessionFetch<any>("/api/zones", { db_zones: [] });
 
   const violationList: ExtendedViolationEvent[] = ctxViolations.length > 0 ? ctxViolations : fetchList;
+  const availableZones = ctxZones.length > 0 ? ctxZones : (zoneData?.db_zones || []);
   const loading = ctxLoading && fetchLoading && violationList.length === 0;
 
   const [triageTab, setTriageTab] = useState<"unacknowledged" | "accepted" | "declined" | "all">("unacknowledged");
   const [previewMedia, setPreviewMedia] = useState<{ src: string; imgSrc?: string; isVideo: boolean; title: string } | null>(null);
 
-  // Multi-parameter filter state
   const [filterZone, setFilterZone] = useState<string>("all");
   const [filterPpe, setFilterPpe] = useState<string>("all");
   const [filterScore, setFilterScore] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const availablePpeTypes = useMemo(() => {
+    const set = new Set<string>();
+    violationList.forEach((v) => {
+      if (Array.isArray(v.missing)) {
+        v.missing.forEach((m) => {
+          if (m) set.add(m.trim());
+        });
+      }
+    });
+    return Array.from(set);
+  }, [violationList]);
 
   const unacknowledgedList = violationList.filter((v) => !v.acknowledged && !v.declined && v.status !== "accepted" && v.status !== "declined");
   const acceptedList = violationList.filter((v) => v.acknowledged || v.status === "accepted" || v.status === "reviewed");
@@ -218,17 +232,27 @@ function ViolationsPage() {
       .finally(() => setLoadingActionId(null));
   };
 
-  const handleClearAll = () => {
-    if (confirm("Are you sure you want to delete all stored violation evidence records from MongoDB?")) {
-      mutate([]);
-      fetch("/api/violations", { method: "DELETE" })
-        .then(() => {
-          invalidateSessionCache("/api/violations");
-          refetchViolations();
-          manualRefetch(true);
-        })
-        .catch((err) => console.error("Clear all failed", err));
-    }
+  const [showConfirmClearAll, setShowConfirmClearAll] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
+  const executeClearAll = () => {
+    setIsClearingAll(true);
+    mutate([]);
+    fetch("/api/violations", { method: "DELETE" })
+      .then(() => {
+        invalidateSessionCache("/api/violations");
+        refetchViolations();
+        manualRefetch(true);
+        showToast("All violation records cleared from database");
+      })
+      .catch((err) => {
+        console.error("Clear all failed", err);
+        showToast("Failed to clear violation records");
+      })
+      .finally(() => {
+        setIsClearingAll(false);
+        setShowConfirmClearAll(false);
+      });
   };
 
   return (
@@ -278,7 +302,7 @@ function ViolationsPage() {
           violationList.length > 0 && (
             <button
               key="clear-all"
-              onClick={handleClearAll}
+              onClick={() => setShowConfirmClearAll(true)}
               className="flex items-center gap-1.5 rounded border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors font-medium cursor-pointer"
             >
               <Trash2 className="size-3.5" /> Purge Past Evidence
@@ -342,13 +366,11 @@ function ViolationsPage() {
                 className="telemetry rounded border border-input bg-background/60 px-2.5 py-1.5 text-xs outline-none focus:border-primary cursor-pointer"
               >
                 <option value="all">All Zones</option>
-                <option value="general_plant">General Plant Floor</option>
-                <option value="work_at_height">Work At Height Platform</option>
-                <option value="construction">Construction Site</option>
-                <option value="restricted_machinery">Restricted Machinery</option>
-                <option value="hazardous_material">Hazardous Material Zone</option>
-                <option value="ZONE-01">Zone 01</option>
-                <option value="ZONE-02">Zone 02</option>
+                {availableZones.map((z: any) => (
+                  <option key={z.id} value={z.id}>
+                    {z.name || z.id}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -360,15 +382,12 @@ function ViolationsPage() {
                 onChange={(e) => setFilterPpe(e.target.value)}
                 className="telemetry rounded border border-input bg-background/60 px-2.5 py-1.5 text-xs outline-none focus:border-primary cursor-pointer"
               >
-                <option value="all">All PPE Types</option>
-                <option value="helmet">Helmet / Hard Hat</option>
-                <option value="vest">Safety Vest</option>
-                <option value="boots">Safety Boots</option>
-                <option value="gloves">Gloves</option>
-                <option value="goggles">Safety Goggles</option>
-                <option value="mask">Face Mask</option>
-                <option value="safety_belt">Harness / Belt</option>
-                <option value="hook">Lanyard Hook</option>
+                <option value="all">All Missing PPE ({availablePpeTypes.length})</option>
+                {availablePpeTypes.map((ppeKey: string) => (
+                  <option key={ppeKey} value={ppeKey}>
+                    {ppeLabel(ppeKey)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -496,7 +515,7 @@ function ViolationsPage() {
 
                     <div className="telemetry mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                       <span>WORKER: {v.workerId}</span>
-                      <span>ZONE: {v.zoneId}</span>
+                      <span>ZONE: {zoneLabel(v.zoneId, availableZones)}</span>
                       <span>CAMERA: {v.cameraId}</span>
                       <span>TIMESTAMP: {formatTime(v.timestamp)}</span>
                     </div>
@@ -577,6 +596,19 @@ function ViolationsPage() {
           })
         )}
       </div>
+
+      {/* Themed Confirm Modal for Purging All Records */}
+      <ConfirmModal
+        isOpen={showConfirmClearAll}
+        title="Purge All Stored Violation Evidence"
+        message="Are you sure you want to permanently delete all stored violation evidence records from MongoDB? This action cannot be undone."
+        confirmText="Purge All Records"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isClearingAll}
+        onConfirm={executeClearAll}
+        onCancel={() => setShowConfirmClearAll(false)}
+      />
     </AppShell>
   );
 }

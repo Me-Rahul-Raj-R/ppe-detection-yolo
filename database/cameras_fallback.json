@@ -13,8 +13,8 @@
   {
     "id": "CAM-F15A",
     "name": "RTSP Camera Feed",
-    "source": "https://www.youtube.com/watch?v=M3EYAY2MftI",
-    "streamUrl": "https://www.youtube.com/watch?v=M3EYAY2MftI",
+    "source": "https://youtu.be/Dhxf5mm7g1g?si=3JtlAZDm2qG__6jd",
+    "streamUrl": "https://youtu.be/Dhxf5mm7g1g?si=3JtlAZDm2qG__6jd",
     "type": "stream",
     "location": "",
     "is_active": 1,

@@ -1,49 +1,53 @@
 """
-EdgeVision TensorRT FP16/INT8 Engine Exporter
-Converts PyTorch (.pt) or ONNX (.onnx) models to TensorRT (.engine) format for Jetson hardware.
-
-Usage:
-  python scripts/export_tensorrt.py --model experiments/ppe_training/custom_model/weights/best.pt --half
+EdgeVision TensorRT FP16 / INT8 Engine Generation Script
+Generates high-performance TensorRT engines from ONNX models for Jetson Orin deployment.
 """
 
 import argparse
-import os
+import subprocess
 import sys
-from ultralytics import YOLO
+import os
 
-def main():
-    parser = argparse.ArgumentParser(description="Export YOLOv8 model to TensorRT FP16/INT8 engine.")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="experiments/ppe_training/custom_model/weights/best.pt",
-        help="Path to input weights (.pt or .onnx)"
-    )
-    parser.add_argument("--imgsz", type=int, default=640, help="Inference resolution size")
-    parser.add_argument("--half", action="store_true", default=True, help="Use FP16 precision mode")
-    parser.add_argument("--int8", action="store_true", default=False, help="Use INT8 precision mode")
-    args = parser.parse_args()
-
-    if not os.path.exists(args.model):
-        print(f"Error: Model file {args.model} not found.")
+def build_tensorrt_engine(onnx_file: str, engine_file: str = "best.engine", precision: str = "fp16"):
+    if not os.path.exists(onnx_file):
+        print(f"Error: ONNX file {onnx_file} not found. Export to ONNX first using export_onnx.py")
         sys.exit(1)
 
-    print(f"Loading model from: {args.model}")
-    model = YOLO(args.model)
+    print(f"--- Generating TensorRT Engine ({precision.upper()}) ---")
+    print(f"Input ONNX: {onnx_file}")
+    print(f"Output Engine: {engine_file}")
 
-    print(f"Exporting to TensorRT .engine (FP16={args.half}, INT8={args.int8})...")
+    cmd = [
+        "trtexec",
+        f"--onnx={onnx_file}",
+        f"--saveEngine={engine_file}",
+        "--verbose"
+    ]
+
+    if precision.lower() == "fp16":
+        cmd.append("--fp16")
+    elif precision.lower() == "int8":
+        cmd.append("--int8")
+        cmd.append("--best")
+
+    cmd_str = " ".join(cmd)
+    print(f"Executing command: {cmd_str}")
+
     try:
-        engine_path = model.export(
-            format="engine",
-            imgsz=args.imgsz,
-            half=args.half,
-            int8=args.int8,
-            device=0
-        )
-        print(f"Successfully generated TensorRT engine: {engine_path}")
-    except Exception as e:
-        print(f"TensorRT export error: {e}")
-        print("Note: Ensure 'tensorrt' python package and CUDA/cuDNN are installed on your NVIDIA Jetson / GPU environment.")
+        res = subprocess.run(cmd, check=True)
+        print(f"TensorRT Engine build successful: {engine_file}")
+    except FileNotFoundError:
+        print("\nNote: 'trtexec' command not found in PATH.")
+        print("To build TensorRT engines on NVIDIA Jetson Orin or CUDA desktop, run:")
+        print(f"  {cmd_str}\n")
+    except subprocess.CalledProcessError as e:
+        print(f"TensorRT engine build failed: {e}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Build TensorRT Engine for Jetson")
+    parser.add_argument("--onnx", type=str, default="best.onnx", help="Input ONNX file")
+    parser.add_argument("--output", type=str, default="best.engine", help="Output TensorRT engine file")
+    parser.add_argument("--precision", type=str, choices=["fp16", "int8", "fp32"], default="fp16", help="Engine precision mode")
+    args = parser.parse_args()
+
+    build_tensorrt_engine(args.onnx, args.output, args.precision)

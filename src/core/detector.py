@@ -42,13 +42,18 @@ log = logging.getLogger(__name__)
 # ── Class definitions (must match data.yaml) ────────────────────────────────
 
 ALL_PPE_CLASSES: set[str] = {
+    # Custom best.pt class labels
+    "helmet", "no_helmet", "vest", "no_vest", "boots", "no_boots",
+    "glove", "no_glove", "glass", "no_glass", "ear_protection", "mask",
+    "lanyard", "no_lanyard", "lanyard_good", "lanyard_bad", "no_harness",
+    # Legacy / Fallback class labels
     "Boots", "Ear-Protection", "Glass", "Glove", "Hard_hat", "Mask",
     "No-Boots", "No-Ear-Protection", "No-Glass", "No-Glove", "No-Helmet",
     "No-Mask", "No-Vest", "Vest", "Circular_Saw", "Fire_Extinguisher",
     "Fire_prevention_Net", "Welding_Equipment",
-    "helmet", "no-helmet", "vest", "no-vest", "gloves", "no-gloves", "boots", 
+    "no-helmet", "no-vest", "gloves", "no-gloves", "boots", 
     "no-boots", "goggles", "no-goggles", "ear-mufs", "face-guard", "safety-suit",
-    "tool", "safety_hook"
+    "tool", "safety_hook", "harness", "safety_belt"
 }
 
 COMPLIANCE_COLOURS = {
@@ -92,11 +97,17 @@ class PPEDetector:
         self.model       = YOLO(model_path)
         self.default_zone = zone
 
+        # Dynamically register all model non-person class names into ALL_PPE_CLASSES
+        if hasattr(self.model, "names") and isinstance(self.model.names, dict):
+            for c_name in self.model.names.values():
+                if str(c_name).lower() not in ("person", "worker", "human"):
+                    ALL_PPE_CLASSES.add(c_name)
+
         # ── Supporting components ───────────────────────────────────────────────
         self._publisher = PPEMqttPublisher(broker=broker, port=port, topic=topic)
         self._rule_engine = RuleEngine()
         self._worker_tracker = WorkerTracker()
-        self._reid_gallery = WorkerReIDGallery(ttl_seconds=1800.0, match_threshold=0.68)
+        self._reid_gallery = WorkerReIDGallery(ttl_seconds=1800.0, match_threshold=0.85)
         self._temporal_validator = TemporalValidator()
         self._lock = threading.Lock()
         
@@ -287,12 +298,15 @@ class PPEDetector:
                 for mem_id, mem_data in self._track_memory.items():
                     if mem_id in used_memory_ids:
                         continue
+                    # Only match tracks active within the last 15 frames (0.75 seconds)
+                    if self._frame_count - mem_data.get("last_frame", 0) > 15:
+                        continue
                     sim = self._compute_walk_robust_similarity(box, mem_data["box"])
                     if sim > best_sim:
                         best_sim = sim
                         best_id = mem_id
 
-                if best_sim >= 0.18 and best_id is not None:
+                if best_sim >= 0.55 and best_id is not None:
                     assigned_id = best_id
                 elif raw_id is not None and raw_id > 0 and raw_id not in used_memory_ids:
                     assigned_id = raw_id

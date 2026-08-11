@@ -1,71 +1,34 @@
-# EdgeVision PPE Compliance & Work-at-Height Platform — User Guide
+# EdgeVision Platform Operational User Guide
 
-## Overview
-EdgeVision is an edge computer vision platform for real-time safety monitoring in industrial environments. It automatically detects workers, verifies PPE compliance (helmets, vests, boots, harnesses), validates zone rules, and records timestamped evidence of violations into MongoDB.
-
----
-
-## Getting Started
-
-### 1. Prerequisites
-- **Python 3.10+**
-- **Node.js 18+** & npm
-- **MongoDB Atlas** or Local MongoDB instance
-- Webcam / RTSP IP camera stream / YouTube video feed
-
-### 2. Environment Setup
-Create a `.env` file in the project root:
-```env
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net
-MONGODB_DB_NAME=edgevision
-TARGET_FPS=20
-DETECTION_CONF=0.20
-```
-
-### 3. Running the Application
-Launch both backend FastAPI server and Vite frontend using `start_fullstack.bat` or manually:
-```bash
-# Terminal 1: Python API & Vision Pipeline
-python -m src.api.server
-
-# Terminal 2: Web Dashboard Frontend
-cd frontend
-npm run dev
-```
-
-Open your browser at `http://localhost:5173`.
+Welcome to the **EdgeVision Industrial PPE Compliance & Work-at-Height Safety Platform** operational manual.
 
 ---
 
-## Key Dashboard Pages
+## 🖥️ Navigation & Dashboard Views
 
-1. **Live Monitoring (`/live`)**: View live AI camera streams in multi-card grid view or single-feed focus view. Includes real-time detection filters (*Show All*, *Violations*, *Compliant*, *Wearing Helmet*, *Wearing Vest*).
-2. **Active Violations (`/violations`)**: Review unacknowledged safety violations with high-resolution image snapshots and 5-second MP4 video evidence clips. Includes single-click **Acknowledge Alert** actions.
-3. **Event History (`/events`)**: Complete searchable database log of past incidents with date range and zone filtering.
-4. **Worker Compliance (`/compliance`)**: Aggregated compliance scores per worker tracking ID.
-5. **Zone Configuration (`/zones`)**: Configure safety requirements per zone (*General Plant*, *Construction*, *Work at Height*, *Restricted Machinery*).
-6. **Camera Management (`/cameras`)**: Add, edit, test, or remove RTSP streams, YouTube feeds, or local webcams.
-7. **Model Monitoring (`/model`)**: Telemetry metrics including real-time FPS throughput, P95 latency, precision, recall, and mAP50.
+### 1. Live Monitoring (`/live`)
+- View multi-camera live video streams overlaid with real-time AI bounding boxes, worker tracking IDs (`Worker-101`), and detected PPE tags.
+- Use interactive stream controls (**Play**, **Pause**, **Seek**, **Skip 5s**, **Restart**) on YouTube streams or RTSP feeds.
 
----
+### 2. Manual Verification & Triage (`/violations`)
+- Safety officers can review raised alerts under **Unacknowledged**, **Accepted**, or **Declined** tabs.
+- Click **Confirm Real Violation** to include the alert in executive reporting.
+- Click **Decline Alert (False Alarm)** to mark it as a false alert. **Declined alerts are automatically removed completely from MongoDB**.
 
-## Jetson & Edge Deployment
+### 3. Event History (`/events`)
+- Search past safety breaches filtered by **Safety Zone**, **Camera ID**, **Tracked Worker ID**, **Date Range**, or **Status**.
+- Preview full-resolution image evidence crops and video clips.
 
-### Exporting Model Engine
-To export PyTorch weights (`.pt`) to ONNX or TensorRT:
-```bash
-# Export to ONNX format
-python scripts/export_onnx.py --model experiments/ppe_training/custom_model/weights/best.pt
+### 4. Safety Zone Rules (`/zones`)
+- Configure required PPE per safety area (`helmet`, `vest`, `boots`, `safety_belt`, `lanyard`, `hook`, `goggles`, `gloves`).
+- Click **Add Safety Zone** to register a new zone.
+- Click **Edit Zone** to modify rules or zone names.
+- Click **Delete Zone** to remove a zone from the database.
 
-# Export to TensorRT FP16 Engine
-python scripts/export_tensorrt.py --model experiments/ppe_training/custom_model/weights/best.pt --half
-```
+### 5. Camera Management (`/cameras`)
+- Add local webcams or RTSP/YouTube stream links.
+- Monitor live stream FPS, latency, and hardware status.
 
-### Auto-boot Service Installation
-Copy `scripts/edgevision.service` to `/etc/systemd/system/` on Linux:
-```bash
-sudo cp scripts/edgevision.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable edgevision
-sudo systemctl start edgevision
-```
+### 6. Reports & Analytics (`/reports`)
+- View daily, weekly, and monthly safety compliance reports.
+- Export filtered audit logs to CSV or Excel.

@@ -15,6 +15,7 @@ Run:
 
 from __future__ import annotations
 
+import math
 import asyncio
 import base64
 import json
@@ -179,76 +180,112 @@ class ThreadedCamera:
         self.latest_frame: np.ndarray | None = None
         self.is_running: bool = False
         self.is_offline: bool = False
-        self.lock = threading.Lock()
+        self.is_paused: bool = False
+        self.lock = threading.Lock()      # Protects self.latest_frame
+        self.cap_lock = threading.Lock()  # Protects self.cap (prevents FFmpeg C++ thread crashes)
         self.thread: threading.Thread | None = None
         self._frame_count: int = 0
         self._open(self.source)
 
     def _open(self, source: str) -> None:
-        self.cap = open_camera_source(source)
-        if self.cap and self.cap.isOpened():
-            if str(source).isdigit():
-                if not config.IS_GPU_AVAILABLE:
-                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                else:
-                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-            self.is_offline = False
-            log.info("ThreadedCamera opened real stream source: %s", source)
-        else:
-            self.cap = None
-            self.is_offline = True
-            self.latest_frame = self._draw_offline_frame()
-            log.warning("Camera source '%s' unavailable/offline. Initializing offline fallback stream.", source)
+        with self.cap_lock:
+            self.cap = open_camera_source(source)
+            if self.cap and self.cap.isOpened():
+                if str(source).isdigit():
+                    if not config.IS_GPU_AVAILABLE:
+                        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    else:
+                        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+                        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+                self.is_offline = False
+                log.info("ThreadedCamera opened real stream source: %s", source)
+            else:
+                self.cap = None
+                self.is_offline = True
+                self.latest_frame = self._draw_offline_frame()
+                log.warning("Camera source '%s' unavailable/offline. Initializing offline fallback stream.", source)
 
         self.is_running = True
         self.thread = threading.Thread(target=self._reader_loop, daemon=True)
         self.thread.start()
 
     def _reader_loop(self) -> None:
+        src_str = str(self.source).lower()
+        is_yt_or_file = "youtube.com" in src_str or "youtu.be" in src_str or os.path.isfile(src_str)
+
         while self.is_running:
+            if self.is_paused:
+                time.sleep(0.03)
+                continue
+
             if not self.is_offline and self.cap is not None:
                 try:
-                    if not self.cap.isOpened():
-                        self.is_offline = True
-                        continue
-                    
-                    # Zero-Lag Buffer Flush: continuously grab latest frame and discard old queued frames
-                    grabbed = self.cap.grab()
-                    if grabbed:
-                        ok, frame = self.cap.retrieve()
-                        if ok and frame is not None:
-                            with self.lock:
-                                self.latest_frame = frame
-                        else:
-                            time.sleep(0.005)
-                    else:
-                        src_str = str(self.source).lower()
-                        is_yt = "youtube.com" in src_str or "youtu.be" in src_str
-                        
-                        if is_yt or os.path.isfile(src_str):
-                            # Loop YouTube streams or video files seamlessly on-the-fly
+                    t0 = time.time()
+                    ok, frame = False, None
+                    frame_interval = 1.0 / max(1.0, config.TARGET_FPS)
+
+                    with self.cap_lock:
+                        if not self.cap or not self.cap.isOpened():
+                            self.is_offline = True
+                            continue
+
+                        if is_yt_or_file:
+                            fps = self.cap.get(cv2.CAP_PROP_FPS)
+                            if not fps or fps <= 0 or math.isnan(fps) or fps > 120:
+                                fps = config.TARGET_FPS
+                            frame_interval = 1.0 / max(1.0, fps)
+
                             try:
-                                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                                ok_reset, frame_reset = self.cap.read()
-                                if ok_reset and frame_reset is not None:
-                                    with self.lock:
-                                        self.latest_frame = frame_reset
-                                    continue
-                            except Exception:
-                                pass
-                            # If seeking pos 0 is unsupported, re-open live HTTP/HLS stream URL
-                            new_cap = open_camera_source(self.source)
-                            if new_cap and new_cap.isOpened():
+                                ok, frame = self.cap.read()
+                            except Exception as read_err:
+                                log.debug("Threaded camera read exception: %s", read_err)
+                                ok, frame = False, None
+
+                            if ok and frame is not None:
+                                with self.lock:
+                                    self.latest_frame = frame
+                            else:
+                                # End of video stream - attempt seamless loop reset
                                 try:
-                                    self.cap.release()
+                                    self.cap.set(cv2.CAP_PROP_POS_MSEC, 0)
+                                    ok_reset, frame_reset = self.cap.read()
+                                    if ok_reset and frame_reset is not None:
+                                        with self.lock:
+                                            self.latest_frame = frame_reset
+                                        continue
                                 except Exception:
                                     pass
-                                self.cap = new_cap
+
+                                # Re-open stream URL if seek is unsupported
+                                new_cap = open_camera_source(self.source)
+                                if new_cap and new_cap.isOpened():
+                                    try:
+                                        self.cap.release()
+                                    except Exception:
+                                        pass
+                                    self.cap = new_cap
+                                else:
+                                    time.sleep(0.1)
                         else:
-                            # Reconnection retry for RTSP/webcam stream
-                            time.sleep(0.05)
+                            # Physical webcam or RTSP live stream: Zero-Lag Buffer Flush
+                            grabbed = self.cap.grab()
+                            if grabbed:
+                                ok, frame = self.cap.retrieve()
+                                if ok and frame is not None:
+                                    with self.lock:
+                                        self.latest_frame = frame
+                                else:
+                                    time.sleep(0.005)
+                            else:
+                                time.sleep(0.05)
+
+                    if is_yt_or_file and ok and frame is not None:
+                        elapsed = time.time() - t0
+                        sleep_time = frame_interval - elapsed
+                        if sleep_time > 0:
+                            time.sleep(sleep_time)
+
                 except Exception as err:
                     log.debug("Threaded camera loop exception: %s", err)
                     time.sleep(0.02)
@@ -314,23 +351,126 @@ class ThreadedCamera:
         return self.is_running
 
     def set(self, propId: int, value: float) -> bool:
-        try:
-            if self.cap and self.cap.isOpened():
-                return self.cap.set(propId, value)
-        except Exception:
-            pass
-        return False
+        with self.cap_lock:
+            try:
+                if self.cap and self.cap.isOpened():
+                    return self.cap.set(propId, value)
+            except Exception:
+                pass
+            return False
+
+    def play(self) -> None:
+        self.is_paused = False
+
+    def pause(self) -> None:
+        self.is_paused = True
+
+    def toggle_play_pause(self) -> bool:
+        self.is_paused = not self.is_paused
+        return self.is_paused
+
+    def seek(self, target_seconds: float) -> float:
+        with self.cap_lock:
+            if not self.cap or not self.cap.isOpened():
+                return 0.0
+            
+            try:
+                fps = self.cap.get(cv2.CAP_PROP_FPS)
+                if not fps or fps <= 0 or math.isnan(fps):
+                    fps = config.TARGET_FPS
+                
+                total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                target_seconds = max(0.0, target_seconds)
+                if total_frames > 0:
+                    duration = total_frames / fps
+                    target_seconds = min(target_seconds, duration)
+
+                target_msec = target_seconds * 1000.0
+                seek_ok = False
+                
+                # 1. Try Millisecond Seek (preferred for FFmpeg HTTP progressive streams)
+                try:
+                    seek_ok = self.cap.set(cv2.CAP_PROP_POS_MSEC, target_msec)
+                except Exception as e:
+                    log.debug("CAP_PROP_POS_MSEC seek warning: %s", e)
+
+                # 2. Fallback to Frame Index Seek if MSEC seek was unsuccessful
+                if not seek_ok:
+                    try:
+                        target_frame = int(target_seconds * fps)
+                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+                    except Exception as e:
+                        log.debug("CAP_PROP_POS_FRAMES seek warning: %s", e)
+
+                # 3. Retrieve new target frame safely
+                try:
+                    ok, frame = self.cap.read()
+                    if ok and frame is not None:
+                        with self.lock:
+                            self.latest_frame = frame
+                except Exception as read_err:
+                    log.debug("Post-seek read error: %s", read_err)
+
+            except Exception as seek_err:
+                log.warning("Seek error on source %s: %s", self.source, seek_err)
+
+            return target_seconds
+
+    def skip(self, delta_seconds: float) -> float:
+        curr = self.get_current_time()
+        return self.seek(curr + delta_seconds)
+
+    def get_current_time(self) -> float:
+        with self.cap_lock:
+            if not self.cap or not self.cap.isOpened():
+                return 0.0
+            try:
+                msec = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+                if msec > 0:
+                    return round(msec / 1000.0, 2)
+                pos_frames = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
+                fps = self.cap.get(cv2.CAP_PROP_FPS)
+                if fps and fps > 0 and not math.isnan(fps) and pos_frames >= 0:
+                    return round(pos_frames / fps, 2)
+            except Exception:
+                pass
+            return 0.0
+
+    def get_duration(self) -> float:
+        with self.cap_lock:
+            if not self.cap or not self.cap.isOpened():
+                return 0.0
+            try:
+                total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                fps = self.cap.get(cv2.CAP_PROP_FPS)
+                if fps and fps > 0 and not math.isnan(fps) and total_frames > 0:
+                    return round(total_frames / fps, 2)
+            except Exception:
+                pass
+            return 0.0
+
+    def get_playback_status(self) -> dict:
+        src_str = str(self.source).lower()
+        is_yt_or_file = "youtube.com" in src_str or "youtu.be" in src_str or os.path.isfile(src_str)
+        return {
+            "is_seekable": is_yt_or_file,
+            "is_paused": self.is_paused,
+            "current_time": self.get_current_time(),
+            "duration": self.get_duration(),
+            "source": self.source,
+        }
 
     def release(self) -> None:
         self.is_running = False
         if self.thread and self.thread.is_alive() and self.thread != threading.current_thread():
             self.thread.join(timeout=1.0)
-        if self.cap:
-            try:
-                self.cap.release()
-            except Exception:
-                pass
-            self.cap = None
+        with self.cap_lock:
+            if self.cap:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = None
         with self.lock:
             self.latest_frame = None
 
@@ -643,10 +783,11 @@ async def vision_loop(cam_id: str) -> None:
 
         payload = json.dumps({
             "camera_id": cam_id,
-            "frame":   img_b64,
-            "workers": workers,
-            "fps":     fps_stats["fps"],
-            "zone":    active_zone,
+            "frame":    img_b64,
+            "workers":  workers,
+            "fps":      fps_stats["fps"],
+            "zone":     active_zone,
+            "playback": camera.get_playback_status() if camera else None,
         })
 
         if manager.active:
@@ -777,6 +918,19 @@ async def set_zone(body: ZoneCreate):
     log.info("Updated safety zone rules for %s / %s: %s", zone_id, zone_name, norm_required)
     return JSONResponse({"success": True, "required_ppe": list(norm_required)})
 
+@app.delete("/api/zones/{zone_id}")
+@app.delete("/zones/{zone_id}")
+async def delete_zone_api(zone_id: str):
+    """Delete a safety zone from DB and purge its active rules."""
+    ok = await db.delete_zone(zone_id)
+    if zone_id in config.ZONE_RULES:
+        del config.ZONE_RULES[zone_id]
+    await manager.broadcast_json({
+        "type": "zone_deleted",
+        "id": zone_id
+    })
+    return JSONResponse({"success": ok, "id": zone_id})
+
 @app.get("/api/violations")
 async def get_violations_api(
     cameras: str = "all",
@@ -805,10 +959,15 @@ async def get_violations_api(
 @app.post("/api/violations/{evt_id}/status")
 @app.patch("/api/violations/{evt_id}/status")
 async def update_violation_status_api(evt_id: str, body: dict | None = None):
-    """Explicitly set violation status to 'accepted' (Confirmed Real) or 'declined' (False Alert)."""
+    """Explicitly set violation status to 'accepted' (Confirmed Real) or 'declined' (False Alert).
+    If status is 'declined', completely remove/delete from database."""
     status = (body or {}).get("status", "accepted")
-    ok = await db.acknowledge_violation(evt_id, status=status)
-    return JSONResponse({"success": ok, "id": evt_id, "status": status})
+    if status == "declined":
+        ok = await db.delete_violation(evt_id)
+        return JSONResponse({"success": ok, "id": evt_id, "status": "declined", "deleted": True})
+    else:
+        ok = await db.acknowledge_violation(evt_id, status=status)
+        return JSONResponse({"success": ok, "id": evt_id, "status": status})
 
 @app.post("/api/violations/{evt_id}/acknowledge")
 @app.patch("/api/violations/{evt_id}/acknowledge")
@@ -931,35 +1090,88 @@ async def get_cameras_api():
 
     return JSONResponse(result)
 
+@app.post("/api/cameras/{cam_id}/controls")
+async def camera_controls_api(cam_id: str, body: dict | None = None):
+    """
+    Control YouTube stream or video file playback.
+    Actions: play, pause, toggle, seek, skip, restart
+    """
+    c_data = _active_cameras.get(cam_id)
+    if not c_data or not c_data.get("camera"):
+        return JSONResponse({"error": "Camera offline or not found"}, status_code=404)
+    
+    camera: ThreadedCamera = c_data["camera"]
+    body = body or {}
+    action = str(body.get("action", "")).lower()
+    val = float(body.get("value", 0.0))
+
+    if action == "play":
+        camera.play()
+    elif action == "pause":
+        camera.pause()
+    elif action == "toggle":
+        camera.toggle_play_pause()
+    elif action == "seek":
+        camera.seek(val)
+    elif action == "skip":
+        camera.skip(val)
+    elif action == "restart":
+        camera.seek(0.0)
+    else:
+        return JSONResponse({"error": f"Unknown action: {action}"}, status_code=400)
+
+    return JSONResponse({
+        "success": True,
+        "action": action,
+        "playback": camera.get_playback_status()
+    })
+
+@app.get("/api/cameras/{cam_id}/controls")
+async def get_camera_controls_api(cam_id: str):
+    c_data = _active_cameras.get(cam_id)
+    if not c_data or not c_data.get("camera"):
+        return JSONResponse({"is_seekable": False, "is_paused": False, "current_time": 0.0, "duration": 0.0})
+    camera: ThreadedCamera = c_data["camera"]
+    return JSONResponse(camera.get_playback_status())
+
 @app.get("/api/devices/cameras")
 async def list_physical_cameras():
     """Probe local hardware ports to discover available webcams without lock contention."""
     available = []
-    seen = set()
 
-    for i in range(5):
-        idx_str = str(i)
-        if idx_str in seen:
-            continue
+    # Check active webcams in vision pipelines first
+    for c_id, c_data in _active_cameras.items():
+        src = str(c_data.get("source", ""))
+        if src.isdigit():
+            available.append({
+                "id": src,
+                "name": f"Webcam Index {src} (Active Pipeline)",
+                "source": src,
+                "resolution": "1280x720",
+                "type": "webcam",
+                "is_active": True
+            })
+
+    if not available:
+        # Probe main webcam index 0
         try:
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
             if not cap.isOpened():
-                cap = cv2.VideoCapture(i)
-            
+                cap = cv2.VideoCapture(0)
             if cap.isOpened():
                 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
                 h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
                 available.append({
-                    "id": idx_str,
-                    "name": f"Webcam Index {i} ({w}x{h})",
-                    "source": idx_str,
+                    "id": "0",
+                    "name": f"Default Webcam Index 0 ({w}x{h})",
+                    "source": "0",
                     "resolution": f"{w}x{h}",
                     "type": "webcam",
-                    "is_active": idx_str in [c_d.get("source") for c_d in _active_cameras.values()]
+                    "is_active": "0" in [c_d.get("source") for c_d in _active_cameras.values()]
                 })
                 cap.release()
         except Exception as err:
-            log.debug("Webcam index %d probe info: %s", i, err)
+            log.debug("Webcam index 0 probe info: %s", err)
 
     if not available:
         available.append({
@@ -968,7 +1180,7 @@ async def list_physical_cameras():
             "source": "0",
             "resolution": "640x480",
             "type": "webcam",
-            "is_active": "0" in [c_d.get("source") for c_d in _active_cameras.values()]
+            "is_active": False
         })
 
     return JSONResponse(available)

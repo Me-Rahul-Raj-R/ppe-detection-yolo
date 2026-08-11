@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { Plus, Trash2, Edit2, X, Settings, Video, Globe, RefreshCw, Radio, Loader2 } from "lucide-react";
 
 import { AppShell, PageHeader, StatusDot } from "@/components/app-shell";
-import { type Camera } from "@/lib/mock-data";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { zoneLabel, type Camera } from "@/lib/mock-data";
 import { useSessionFetch, invalidateSessionCache } from "@/hooks/use-session-fetch";
 import { useAppData } from "@/lib/data-context";
 import { useToast } from "@/lib/toast-context";
@@ -22,14 +23,6 @@ export const Route = createFileRoute("/cameras")({
   component: CamerasPage,
 });
 
-const DEFAULT_ZONES = [
-  { id: "general_plant", name: "General Plant Floor" },
-  { id: "restricted_machinery", name: "Restricted Machinery Zone" },
-  { id: "hazardous_material", name: "Hazardous Chemical Area" },
-  { id: "ZONE-01", name: "Zone 01 — Assembly Floor" },
-  { id: "ZONE-02", name: "Zone 02 — High Elevation Site" },
-];
-
 function CamerasPage() {
   const { cameras: ctxCameras, zones: ctxZones, refetchCameras, refetchAll } = useAppData();
   const { showToast } = useToast();
@@ -47,8 +40,8 @@ function CamerasPage() {
   const cameraList = fetchList.length > 0 ? fetchList : (ctxCameras.length > 0 ? ctxCameras : []);
   const loading = fetchLoading && cameraList.length === 0;
 
-  const rawZones = ctxZones.length > 0 ? ctxZones : (zoneData?.zones?.length > 0 ? zoneData.zones : zoneData?.db_zones);
-  const zoneList = (rawZones && rawZones.length > 0) ? rawZones : DEFAULT_ZONES;
+  const rawZones = ctxZones.length > 0 ? ctxZones : (zoneData?.db_zones?.length > 0 ? zoneData.db_zones : zoneData?.zones);
+  const zoneList = rawZones || [];
 
   // New Form state
   const [cameraType, setCameraType] = useState("webcam");
@@ -203,24 +196,29 @@ function CamerasPage() {
       .finally(() => setLoadingCamId(null));
   };
 
-  const handleDeleteCamera = (camId: string) => {
-    if (confirm("Are you sure you want to delete this camera from the MongoDB cluster?")) {
-      setLoadingCamId(camId);
-      fetch(`/api/cameras/${camId}`, { method: "DELETE" })
-        .then((res) => {
-          if (!res.ok) throw new Error("Failed to delete camera");
-          invalidateSessionCache("/api/cameras");
-          refetchCameras();
-          refetchAll();
-          manualRefetch(true);
-          showToast("Camera deleted successfully");
-        })
-        .catch((err) => {
-          console.error("Failed to delete camera", err);
-          showToast("Failed to delete camera");
-        })
-        .finally(() => setLoadingCamId(null));
-    }
+  const [confirmDeleteCamera, setConfirmDeleteCamera] = useState<Camera | null>(null);
+
+  const executeDeleteCamera = () => {
+    if (!confirmDeleteCamera) return;
+    const camId = confirmDeleteCamera.id;
+    setLoadingCamId(camId);
+    fetch(`/api/cameras/${camId}`, { method: "DELETE" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to delete camera");
+        invalidateSessionCache("/api/cameras");
+        refetchCameras();
+        refetchAll();
+        manualRefetch(true);
+        showToast(`Camera '${confirmDeleteCamera.name}' deleted successfully`);
+      })
+      .catch((err) => {
+        console.error("Failed to delete camera", err);
+        showToast("Failed to delete camera");
+      })
+      .finally(() => {
+        setLoadingCamId(null);
+        setConfirmDeleteCamera(null);
+      });
   };
 
   return (
@@ -447,7 +445,7 @@ function CamerasPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground font-mono text-xs">{c.zoneId}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground font-mono text-xs">{zoneLabel(c.zoneId, zoneList)}</td>
                     <td className="telemetry px-3 py-2.5 text-xs">{c.resolution}</td>
                     <td className="telemetry px-3 py-2.5 text-xs">{c.targetFps}</td>
                     <td
@@ -493,7 +491,7 @@ function CamerasPage() {
                         <Edit2 className="size-3.5" />
                       </button>
                       <button
-                        onClick={() => handleDeleteCamera(c.id)}
+                        onClick={() => setConfirmDeleteCamera(c)}
                         disabled={loadingCamId === c.id}
                         title="Delete Camera"
                         className="rounded border border-destructive/30 bg-destructive/10 p-1 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50"
@@ -508,6 +506,19 @@ function CamerasPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Themed Confirm Modal for Deleting Camera */}
+      <ConfirmModal
+        isOpen={!!confirmDeleteCamera}
+        title={`Delete Camera: ${confirmDeleteCamera?.name || confirmDeleteCamera?.id}`}
+        message={`Are you sure you want to delete camera '${confirmDeleteCamera?.name}' (${confirmDeleteCamera?.id})? This will stop its vision pipeline and remove it from MongoDB.`}
+        confirmText="Delete Camera"
+        cancelText="Keep Camera"
+        variant="danger"
+        isLoading={loadingCamId !== null}
+        onConfirm={executeDeleteCamera}
+        onCancel={() => setConfirmDeleteCamera(null)}
+      />
     </AppShell>
   );
 }

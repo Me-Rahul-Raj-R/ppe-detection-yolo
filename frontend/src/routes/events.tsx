@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Download, Search, Image as ImageIcon, X, Loader2 } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { formatTime, type ViolationEvent } from "@/lib/mock-data";
+import { formatTime, zoneLabel, type ViolationEvent } from "@/lib/mock-data";
 import { useSessionFetch } from "@/hooks/use-session-fetch";
 import { useAppData } from "@/lib/data-context";
 import { useToast } from "@/lib/toast-context";
@@ -23,12 +23,14 @@ export const Route = createFileRoute("/events")({
 });
 
 export function EventsPage() {
-  const { violations: ctxViolations, loading: ctxLoading } = useAppData();
+  const { violations: ctxViolations, zones: ctxZones, loading: ctxLoading } = useAppData();
   const { showToast } = useToast();
   const [exporting, setExporting] = useState(false);
   const { data: fetchList, loading: fetchLoading } = useSessionFetch<ViolationEvent[]>("/api/violations", []);
+  const { data: zoneData } = useSessionFetch<any>("/api/zones", { db_zones: [] });
 
   const eventList: ViolationEvent[] = ctxViolations.length > 0 ? ctxViolations : fetchList;
+  const availableZones = ctxZones.length > 0 ? ctxZones : (zoneData?.db_zones || []);
   const loading = ctxLoading && fetchLoading && eventList.length === 0;
 
   const [q, setQ] = useState("");
@@ -40,14 +42,6 @@ export function EventsPage() {
     () => Array.from(new Set(eventList.map((v) => v.type))),
     [eventList],
   );
-
-  const zoneList = [
-    { id: "general_plant", name: "General Plant Floor" },
-    { id: "restricted_machinery", name: "Restricted Machinery Zone" },
-    { id: "hazardous_material", name: "Hazardous Chemical Area" },
-    { id: "ZONE-01", name: "Zone 01 — Assembly Floor" },
-    { id: "ZONE-02", name: "Zone 02 — High Elevation Site" },
-  ];
 
   const rows = useMemo(
     () =>
@@ -120,9 +114,9 @@ export function EventsPage() {
           className="telemetry rounded border border-input bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="all">All zones</option>
-          {zoneList.map((z) => (
+          {availableZones.map((z: any) => (
             <option key={z.id} value={z.id}>
-              {z.name}
+              {z.name || z.id}
             </option>
           ))}
         </select>
@@ -176,7 +170,7 @@ export function EventsPage() {
                   </td>
                   <td className="telemetry px-3 py-2.5 text-xs font-medium">{v.workerId}</td>
                   <td className="px-3 py-2.5 text-xs">{v.type}</td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.zoneId}</td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{zoneLabel(v.zoneId, availableZones)}</td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.cameraId}</td>
                   <td className="telemetry px-3 py-2.5 text-xs font-mono">{(v.confidence * 100).toFixed(0)}%</td>
                   <td className="telemetry px-3 py-2.5 text-xs text-muted-foreground">

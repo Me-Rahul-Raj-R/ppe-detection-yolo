@@ -14,6 +14,7 @@ import {
 } from "recharts";
 
 import { AppShell, PageHeader, StatCard } from "@/components/app-shell";
+import { formatTime, zoneLabel } from "@/lib/mock-data";
 import { useAppData } from "@/lib/data-context";
 import { useToast } from "@/lib/toast-context";
 
@@ -66,6 +67,19 @@ function ReportsPage() {
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [selectedWorker, setSelectedWorker] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+
+  const workerOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    ctxWorkers.forEach((w: any) => {
+      map.set(w.id, `${w.id} (${w.crew || w.name || "Worker"})`);
+    });
+    ctxViolations.forEach((v: any) => {
+      if (v.workerId && !map.has(v.workerId)) {
+        map.set(v.workerId, v.workerId);
+      }
+    });
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+  }, [ctxWorkers, ctxViolations]);
 
   const [filteredEvents, setFilteredEvents] = useState<FilteredViolation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -255,10 +269,10 @@ function ReportsPage() {
               onChange={(e) => setSelectedWorker(e.target.value)}
               className="telemetry w-full rounded border border-input bg-background/80 px-3 py-1.5 text-xs outline-none focus:border-primary"
             >
-              <option value="all">All Workers</option>
-              {ctxWorkers.map((w: any) => (
+              <option value="all">All Tracked Workers ({workerOptions.length})</option>
+              {workerOptions.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.id} ({w.crew || "Worker"})
+                  {w.label}
                 </option>
               ))}
             </select>
@@ -428,9 +442,9 @@ function ReportsPage() {
                 filteredEvents.map((v) => (
                   <tr key={v.id} className="hover:bg-accent/40">
                     <td className="telemetry px-3 py-2.5 text-primary font-semibold font-mono">{v.id}</td>
-                    <td className="telemetry px-3 py-2.5 text-muted-foreground font-mono">{v.timestamp}</td>
+                    <td className="telemetry px-3 py-2.5 text-muted-foreground font-mono">{formatTime(v.timestamp)}</td>
                     <td className="telemetry px-3 py-2.5 font-medium">{v.workerId}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{v.zoneId}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{zoneLabel(v.zoneId)}</td>
                     <td className="px-3 py-2.5 text-destructive font-medium">
                       {v.missing && v.missing.length > 0 ? v.missing.join(", ") : v.type}
                     </td>

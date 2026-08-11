@@ -61,7 +61,8 @@ export type Camera = {
 export type Zone = {
   id: string;
   name: string;
-  kind: string;
+  kind?: string;
+  description?: string;
   required: Record<PpeKey, boolean>;
   frameThreshold: number; // violation frames out of last 10
   dwellSeconds: number;
@@ -101,12 +102,24 @@ export type Worker = {
 export const formatTime = (iso: string) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("en-GB", {
+    let cleanStr = String(iso).trim();
+    if (cleanStr.includes(" IST")) {
+      cleanStr = cleanStr.replace(" IST", " GMT+0530");
+    }
+    const date = new Date(cleanStr);
+    if (isNaN(date.getTime())) {
+      return iso;
+    }
+    return date.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "short",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+      second: "2-digit",
+      hour12: true,
+    }) + " IST";
   } catch {
     return iso;
   }
@@ -115,3 +128,22 @@ export const formatTime = (iso: string) => {
 /** Look up a PPE label with fallback to raw key */
 export const ppeLabel = (key: string): string =>
   PPE_LABELS[key as PpeKey] || key.replace(/_/g, " ");
+
+/** Look up a human-readable Zone name dynamically from database zones array or raw ID */
+export const zoneLabel = (key: string, availableZones?: Array<{ id?: string; name?: string }>): string => {
+  if (!key) return "General Plant Floor";
+  const k = String(key).trim();
+
+  if (Array.isArray(availableZones) && availableZones.length > 0) {
+    const match = availableZones.find(
+      (z) => z && (z.id === k || z.name?.toLowerCase() === k.toLowerCase() || z.id?.toLowerCase() === k.toLowerCase())
+    );
+    if (match && match.name) {
+      return match.name;
+    }
+  }
+
+  return k
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};

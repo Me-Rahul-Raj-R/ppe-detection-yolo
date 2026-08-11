@@ -19,7 +19,7 @@ MQTT_USE_TLS  = os.getenv("MQTT_USE_TLS", "false").lower() == "true"
 # ── Model ─────────────────────────────────────────────────────────────────────
 DEFAULT_MODEL_PATH  = os.getenv(
     "MODEL_PATH",
-    "models/best.pt"
+    "best.pt" if os.path.exists("best.pt") else "models/best.pt"
 )
 FALLBACK_MODEL_PATH = "models/yolo11n.pt"
 DETECTION_CONF      = float(os.getenv("DETECTION_CONF", "0.20"))
@@ -47,25 +47,24 @@ else:
 
 # ── PPE classes (must match model / data.yaml order) ─────────────────────────
 PPE_CLASSES = [
-    "Boots",                # 0
-    "Ear-Protection",       # 1
-    "Glass",                # 2
-    "Glove",                # 3
-    "Hard_hat",             # 4
-    "Mask",                 # 5
-    "No-Boots",             # 6
-    "No-Ear-Protection",    # 7
-    "No-Glass",             # 8
-    "No-Glove",             # 9
-    "No-Helmet",            # 10
-    "No-Mask",              # 11
-    "No-Vest",              # 12
-    "Worker",               # 13
-    "Vest",                 # 14
-    "Circular_Saw",         # 15
-    "Fire_Extinguisher",    # 16
-    "Fire_prevention_Net",  # 17
-    "Welding_Equipment",    # 18
+    "person",               # 0
+    "helmet",               # 1
+    "vest",                 # 2
+    "boots",                # 3
+    "lanyard",              # 4
+    "no_harness",           # 5
+    "no_lanyard",           # 6
+    "lanyard_good",         # 7
+    "lanyard_bad",          # 8
+    "glove",                # 9
+    "glass",                # 10
+    "ear_protection",       # 11
+    "mask",                 # 12
+    "no_helmet",            # 13
+    "no_vest",              # 14
+    "no_boots",             # 15
+    "no_glove",             # 16
+    "no_glass",             # 17
 ]
 
 # ── Stage-3 association ───────────────────────────────────────────────────────
@@ -87,16 +86,64 @@ VIOLATION_COOLDOWN_SECS = float(os.getenv("VIOLATION_COOLDOWN_SECS", "5.0"))   #
 
 # ── PPE Aliases & Normalization ───────────────────────────────────────────────
 PPE_ALIASES: dict[str, str] = {
+    # Helmet / Hard hat
     "helmet":            "Hard_hat",
+    "Hard_hat":          "Hard_hat",
+    "no_helmet":         "Hard_hat",
+    "no-helmet":         "Hard_hat",
+    "No-Helmet":         "Hard_hat",
+    
+    # Vest
     "vest":              "Vest",
-    "gloves":            "Glove",
+    "Vest":              "Vest",
+    "no_vest":           "Vest",
+    "no-vest":           "Vest",
+    "No-Vest":           "Vest",
+    
+    # Boots
     "boots":             "Boots",
+    "Boots":             "Boots",
+    "no_boots":          "Boots",
+    "no-boots":          "Boots",
+    "No-Boots":          "Boots",
+    
+    # Gloves
+    "glove":             "Glove",
+    "gloves":            "Glove",
+    "Glove":             "Glove",
+    "no_glove":          "Glove",
+    "no-gloves":         "Glove",
+    "No-Glove":          "Glove",
+    
+    # Glass / Goggles
+    "glass":             "Glass",
     "goggles":           "Glass",
+    "Glass":             "Glass",
+    "no_glass":          "Glass",
+    "no-goggles":        "Glass",
+    "No-Glass":          "Glass",
+    
+    # Ear protection
+    "ear_protection":   "Ear-Protection",
     "ear-mufs":          "Ear-Protection",
-    "face-guard":        "Mask",
+    "Ear-Protection":    "Ear-Protection",
+    "no-ear-protection": "Ear-Protection",
+    "No-Ear-Protection": "Ear-Protection",
+    
+    # Mask
+    "mask":              "Mask",
+    "Mask":              "Mask",
+    "no-mask":           "Mask",
+    "No-Mask":           "Mask",
+    
+    # Harness / Lanyard / Height Safety
+    "lanyard":           "lanyard",
+    "lanyard_good":      "lanyard",
+    "lanyard_bad":       "lanyard",
+    "no_lanyard":        "lanyard",
+    "no_harness":        "safety_belt",
     "harness":           "safety_belt",
     "safety_belt":       "safety_belt",
-    "lanyard":           "lanyard",
     "hook":              "hook",
     "anchor_point":      "anchor_point",
 }
