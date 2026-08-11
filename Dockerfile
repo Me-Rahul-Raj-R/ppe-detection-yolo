@@ -31,7 +31,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy Backend source code and models
 COPY src/ ./src/
 COPY models/ ./models/
-COPY experiments/ ./experiments/
 COPY database/ ./database/
 COPY bytetrack.yaml ./
 

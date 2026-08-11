@@ -18,6 +18,8 @@ services:
         value: edgevision
       - key: PERFORMANCE_PROFILE
         value: low_end
+      - key: MODEL_PATH
+        value: models/best.pt
       - key: DETECTION_CONF
         value: "0.20"
 
