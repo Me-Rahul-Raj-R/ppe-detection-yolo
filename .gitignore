@@ -1,4 +1,8 @@
-# Python & Environments
+# ==============================================================================
+# EdgeVision PPE Compliance Platform - Git & Hugging Face Ignore Rules
+# ==============================================================================
+
+# ── 1. Python & Virtual Environments ──────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -11,29 +15,30 @@ build/
 venv/
 env/
 
-# Model outputs & Cache (Ignore TensorRT engines & temp training runs)
+# ── 2. AI Models & Weights ───────────────────────────────────────────────────
+# Ignore temporary export formats (TensorRT engines, ONNX exports, training runs)
 ppe_training/
 runs/
+experiments/
 *.engine
 *.onnx
-.pytest_cache/
-.benchmarks/
 
-# Explicitly KEEP models tracked in Git per project requirement
+# KEEP active PyTorch model weights tracked in Git / Hugging Face
 !models/
 !models/*.pt
 
-# Database evidence & sensitive files
-database/evidence/*
-!database/evidence/.gitkeep
+# ── 3. Databases & Evidence Files ──────────────────────────────────────────────
+# Ignore generated SQLite databases (auto-created by app at runtime)
 database/*.db
 database/*.sqlite
 *.db
 *.sqlite
-cookies.txt
-*.log
 
-# Frontend & Node dependencies
+# Ignore video evidence clips (keep directory structure via .gitkeep)
+database/evidence/*
+!database/evidence/.gitkeep
+
+# ── 4. Frontend & Node.js Dependencies ─────────────────────────────────────────
 node_modules/
 frontend/node_modules/
 frontend/.output/
@@ -41,7 +46,16 @@ frontend/.wrangler/
 frontend/.nitro/
 frontend/dist/
 
-# OS & Replit
+# ── 5. Logs, Caches & Temporary Artifacts ─────────────────────────────────────
+.pytest_cache/
+.benchmarks/
+scratch/
+cookies.txt
+*.log
+*.tmp
+*.bak
+
+# ── 6. OS & System Files ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 .replit
