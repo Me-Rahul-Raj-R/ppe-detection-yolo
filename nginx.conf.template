@@ -16,7 +16,7 @@ http {
 
         # REST API endpoints
         location /api/ {
-            proxy_pass http://127.0.0.1:8000/api/;
+            proxy_pass http://127.0.0.1:8080/api/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -26,7 +26,7 @@ http {
 
         # WebSocket telemetry & live annotated frames
         location /ws {
-            proxy_pass http://127.0.0.1:8000/ws;
+            proxy_pass http://127.0.0.1:8080/ws;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "Upgrade";
@@ -38,7 +38,7 @@ http {
 
         # Live MJPEG stream
         location /stream {
-            proxy_pass http://127.0.0.1:8000/stream;
+            proxy_pass http://127.0.0.1:8080/stream;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_buffering off;
@@ -48,7 +48,7 @@ http {
 
         # Health endpoint
         location /health {
-            proxy_pass http://127.0.0.1:8000/health;
+            proxy_pass http://127.0.0.1:8080/health;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
         }
