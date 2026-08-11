@@ -1,5 +1,4 @@
 {
-  "outputDirectory": ".output/public",
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -12,10 +11,6 @@
     {
       "source": "/stream",
       "destination": "/stream"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
     }
   ]
 }
