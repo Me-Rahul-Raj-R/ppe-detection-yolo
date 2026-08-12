@@ -173,3 +173,12 @@ SERVER_PORT=8000
 ## 📜 License & Compliance
 
 Developed for enterprise workplace safety monitoring. Compliance rules adhere to OSHA and ISO 45001 occupational health and safety management guidelines.
+
+
+## ONNX FORMAT
+
+On NVIDIA Jetson boards, the ONNX (Open Neural Network Exchange) format acts as a standard bridge. You convert trained models from PyTorch or TensorFlow into .onnx files, then optimize them into TensorRT engine files to run fast AI inference on the device GPU
+
+## Jetson
+
+NVIDIA Jetson is a leading series of low-power, compact embedded computing boards designed for accelerating edge AI, computer vision, and robotics. It runs specialized software like the NVIDIA JetPack SDK to power autonomous machines, drones, and smart devices.

@@ -647,10 +647,10 @@ async def _save_and_record(w_data, ann_img, f_buf_copy, z_id, cam_id, ts, b64):
             if hasattr(cv2, "setLogLevel") and hasattr(cv2, "LOG_LEVEL_SILENT"):
                 cv2.setLogLevel(cv2.LOG_LEVEL_SILENT)
             h, w_dim, _ = ann_img.shape
-            for codec in ['mp4v', 'avc1', 'XVID', 'MJPG']:
+            for codec in ['avc1', 'mp4v']:
                 try:
                     fourcc = cv2.VideoWriter_fourcc(*codec)
-                    out_vid = cv2.VideoWriter(vid_filepath, fourcc, 15.0, (w_dim, h))
+                    out_vid = cv2.VideoWriter(vid_filepath, cv2.CAP_FFMPEG, fourcc, 15.0, (w_dim, h))
                     if out_vid.isOpened():
                         for f_b in f_buf_copy:
                             if f_b is not None and f_b.shape[:2] == (h, w_dim):
