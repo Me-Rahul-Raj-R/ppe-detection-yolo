@@ -1,13 +1,3 @@
----
-title: EdgeVision PPE Compliance Platform
-emoji: 🦺
-colorFrom: blue
-colorTo: green
-sdk: gradio
-app_file: app.py
-pinned: false
----
-
 # 🛡️ EdgeVision — Autonomous Industrial PPE Safety & Compliance Intelligence Platform
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
