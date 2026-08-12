@@ -15,18 +15,25 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Hugging Face ZeroGPU compatibility hook
-try:
-    import spaces
-    HAS_ZERO_GPU = True
-except ImportError:
-    HAS_ZERO_GPU = False
+# Hugging Face ZeroGPU compatibility hook (only active when running on HF ZeroGPU infrastructure)
+HAS_ZERO_GPU = False
+if os.getenv("SPACES_ZERO_GPU", "").lower() in ("1", "true", "yes") or os.getenv("ZERO_GPU", "").lower() in ("1", "true", "yes"):
+    try:
+        import spaces
+        HAS_ZERO_GPU = True
+    except Exception:
+        HAS_ZERO_GPU = False
 
 if HAS_ZERO_GPU:
-    @spaces.GPU
-    def zero_gpu_startup():
-        """Top-level function decorated with @spaces.GPU to satisfy Hugging Face ZeroGPU supervisor check."""
-        return True
+    try:
+        @spaces.GPU
+        def zero_gpu_startup():
+            """Top-level function decorated with @spaces.GPU to satisfy Hugging Face ZeroGPU supervisor check."""
+            return True
+        zero_gpu_startup()
+    except Exception as _gpu_err:
+        print(f"ZeroGPU startup check skipped: {_gpu_err}")
+        HAS_ZERO_GPU = False
 
 from src.api.server import app as fastapi_app
 

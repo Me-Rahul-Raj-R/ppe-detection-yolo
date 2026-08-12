@@ -1,0 +1,20 @@
+{
+  "settings_version": "0.0.7",
+  "datasets_dir": "D:\\PROJECTS\\PPE DETECTION\\datasets",
+  "weights_dir": "weights",
+  "runs_dir": "runs",
+  "uuid": "1bc842b511f08bbdbb57623142e240cea081b00defbf0a43faa75f32dd62ded8",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

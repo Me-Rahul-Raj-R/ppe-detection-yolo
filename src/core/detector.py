@@ -40,26 +40,46 @@ from src.core.temporal_validator import TemporalValidator
 log = logging.getLogger(__name__)
 
 # ── Hugging Face ZeroGPU compatibility ───────────────────────────────────────
-try:
-    import spaces
-    HAS_ZERO_GPU = True
-except ImportError:
-    HAS_ZERO_GPU = False
+HAS_ZERO_GPU = False
+if os.getenv("SPACES_ZERO_GPU", "").lower() in ("1", "true", "yes") or os.getenv("ZERO_GPU", "").lower() in ("1", "true", "yes"):
+    try:
+        import spaces
+        HAS_ZERO_GPU = True
+    except Exception:
+        HAS_ZERO_GPU = False
 
 if HAS_ZERO_GPU:
-    @spaces.GPU(duration=60)
-    def _run_model_track(model, frame, **kwargs):
-        return model.track(frame, **kwargs)
+    try:
+        @spaces.GPU(duration=60)
+        def _gpu_track(model, frame, **kwargs):
+            return model.track(frame, **kwargs)
 
-    @spaces.GPU(duration=60)
-    def _run_model_predict(model, frame, **kwargs):
-        return model.predict(frame, **kwargs)
-else:
-    def _run_model_track(model, frame, **kwargs):
-        return model.track(frame, **kwargs)
+        @spaces.GPU(duration=60)
+        def _gpu_predict(model, frame, **kwargs):
+            return model.predict(frame, **kwargs)
+    except Exception as _gpu_init_err:
+        log.warning("ZeroGPU initialization failed (%s). Defaulting to standard model execution.", _gpu_init_err)
+        HAS_ZERO_GPU = False
 
-    def _run_model_predict(model, frame, **kwargs):
-        return model.predict(frame, **kwargs)
+def _run_model_track(model, frame, **kwargs):
+    global HAS_ZERO_GPU
+    if HAS_ZERO_GPU:
+        try:
+            return _gpu_track(model, frame, **kwargs)
+        except Exception as err:
+            log.warning("ZeroGPU runtime call failed (%s). Falling back to direct CPU/GPU track.", err)
+            HAS_ZERO_GPU = False
+    return model.track(frame, **kwargs)
+
+def _run_model_predict(model, frame, **kwargs):
+    global HAS_ZERO_GPU
+    if HAS_ZERO_GPU:
+        try:
+            return _gpu_predict(model, frame, **kwargs)
+        except Exception as err:
+            log.warning("ZeroGPU runtime call failed (%s). Falling back to direct CPU/GPU predict.", err)
+            HAS_ZERO_GPU = False
+    return model.predict(frame, **kwargs)
 
 # ── Class definitions (must match data.yaml) ────────────────────────────────
 
