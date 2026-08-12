@@ -1,5 +1,22 @@
 [
   {
+    "id": "ZONE-01",
+    "name": "general_plant",
+    "description": "General plant area \u2013 helmet and vest required",
+    "required_ppe": [
+      "helmet",
+      "vest",
+      "gloves",
+      "boots",
+      "goggles",
+      "ear-mufs",
+      "face-guard",
+      "safety_belt",
+      "lanyard",
+      "hook"
+    ]
+  },
+  {
     "id": "ZONE-02",
     "name": "construction",
     "description": "Active construction \u2013 helmet, vest, boots required",
@@ -25,23 +42,6 @@
       "vest",
       "boots",
       "safety_belt",
-      "hook"
-    ]
-  },
-  {
-    "id": "ZONE-01",
-    "name": "general_plant",
-    "description": "General plant area \u2013 helmet and vest required",
-    "required_ppe": [
-      "helmet",
-      "vest",
-      "gloves",
-      "boots",
-      "goggles",
-      "ear-mufs",
-      "face-guard",
-      "safety_belt",
-      "lanyard",
       "hook"
     ]
   },

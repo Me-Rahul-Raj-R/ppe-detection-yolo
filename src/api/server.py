@@ -56,6 +56,9 @@ def open_camera_source(source: str) -> cv2.VideoCapture | None:
     """Helper to open webcam indices, RTSP URLs, HTTP video feeds, video files, or YouTube streams with robust fallback."""
     src_str = str(source).strip()
     cap = None
+    
+    # Apply FFmpeg network resilience options globally for OpenCV video capture
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|reconnect;1|reconnect_streamed;1|reconnect_delay_max;5|stimeout;10000000|timeout;10000000"
 
     if src_str.isdigit():
         idx = int(src_str)
@@ -113,7 +116,7 @@ def open_camera_source(source: str) -> cv2.VideoCapture | None:
                     fmt = next((f for f in reversed(info["formats"]) if f.get("url") and f.get("height", 0) <= 720), info["formats"][-1])
                     url = fmt.get("url")
                 if url:
-                    c = cv2.VideoCapture(url)
+                    c = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
                     if c and c.isOpened():
                         ok, test_frame = c.read()
                         if ok and test_frame is not None:
@@ -132,13 +135,12 @@ def open_camera_source(source: str) -> cv2.VideoCapture | None:
             except Exception as err:
                 log.warning("cap_from_youtube fallback warning: %s", err)
     elif src_str.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;3000000|timeout;3000000"
         try:
             ff_params = []
             if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
-                ff_params.extend([cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 3000])
+                ff_params.extend([cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000])
             if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
-                ff_params.extend([cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000])
+                ff_params.extend([cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000])
 
             c = cv2.VideoCapture(src_str, cv2.CAP_FFMPEG, ff_params) if ff_params else cv2.VideoCapture(src_str, cv2.CAP_FFMPEG)
             if c and c.isOpened():

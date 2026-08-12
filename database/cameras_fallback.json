@@ -33,17 +33,6 @@
     "target_fps": 20
   },
   {
-    "id": "CAM-79C7",
-    "name": "RTSP Camera Feed",
-    "source": "https://youtube.com/live/dS7m1kPRgzY",
-    "streamUrl": "https://youtube.com/live/dS7m1kPRgzY",
-    "type": "stream",
-    "location": "",
-    "is_active": 1,
-    "zone_id": "ZONE-02",
-    "target_fps": 20
-  },
-  {
     "id": "CAM-73CD",
     "name": "Local Webcam (Index 1)",
     "source": "1",
