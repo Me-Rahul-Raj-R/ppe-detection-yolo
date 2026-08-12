@@ -40,13 +40,26 @@ def _load_fallback_json(filepath: str, default: list) -> list:
             pass
     return [dict(x) for x in default]
 
+import threading
+import time
+_fallback_lock = threading.Lock()
+
 def _save_fallback_json(filepath: str, data: list) -> None:
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, default=str)
-    except Exception as e:
-        log.warning("Failed to save fallback JSON %s: %s", filepath, e)
+    with _fallback_lock:
+        for attempt in range(3):
+            try:
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, default=str)
+                break
+            except OSError as e:
+                if attempt == 2:
+                    log.warning("Failed to save fallback JSON %s: %s", filepath, e)
+                else:
+                    time.sleep(0.1)
+            except Exception as e:
+                log.warning("Failed to save fallback JSON %s: %s", filepath, e)
+                break
 
 _client = None
 _db = None
