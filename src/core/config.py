@@ -21,7 +21,7 @@ DEFAULT_MODEL_PATH  = os.getenv(
     "MODEL_PATH",
     "models/best.pt" if os.path.exists("models/best.pt") else "best.pt"
 )
-FALLBACK_MODEL_PATH = "models/yolo11n.pt"
+FALLBACK_MODEL_PATH = os.getenv("FALLBACK_MODEL_PATH", "yolov8n.pt")
 DETECTION_CONF      = float(os.getenv("DETECTION_CONF", "0.20"))
 TRACKER_CONFIG      = "bytetrack.yaml"
 

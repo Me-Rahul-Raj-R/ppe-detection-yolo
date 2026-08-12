@@ -39,6 +39,28 @@ from src.core.temporal_validator import TemporalValidator
 
 log = logging.getLogger(__name__)
 
+# ── Hugging Face ZeroGPU compatibility ───────────────────────────────────────
+try:
+    import spaces
+    HAS_ZERO_GPU = True
+except ImportError:
+    HAS_ZERO_GPU = False
+
+if HAS_ZERO_GPU:
+    @spaces.GPU(duration=60)
+    def _run_model_track(model, frame, **kwargs):
+        return model.track(frame, **kwargs)
+
+    @spaces.GPU(duration=60)
+    def _run_model_predict(model, frame, **kwargs):
+        return model.predict(frame, **kwargs)
+else:
+    def _run_model_track(model, frame, **kwargs):
+        return model.track(frame, **kwargs)
+
+    def _run_model_predict(model, frame, **kwargs):
+        return model.predict(frame, **kwargs)
+
 # ── Class definitions (must match data.yaml) ────────────────────────────────
 
 ALL_PPE_CLASSES: set[str] = {
@@ -80,13 +102,28 @@ class PPEDetector:
         port:       int           = config.MQTT_PORT,
         topic:      str           = config.MQTT_TOPIC,
     ) -> None:
-        # ── Model ──────────────────────────────────────────────────────────────
         if model_path is None:
             model_path = config.DEFAULT_MODEL_PATH
-        if not os.path.exists(model_path):
-            log.warning("Custom model not found at %s, using fallback %s",
+
+        def _is_invalid_or_lfs(path: str) -> bool:
+            if not path or not os.path.exists(path):
+                return True
+            if os.path.getsize(path) < 1024:
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        if "git-lfs" in f.read(100):
+                            return True
+                except Exception:
+                    pass
+            return False
+
+        if _is_invalid_or_lfs(model_path):
+            log.warning("Custom model invalid or LFS pointer at %s, using fallback %s",
                         model_path, config.FALLBACK_MODEL_PATH)
             model_path = config.FALLBACK_MODEL_PATH
+
+        if _is_invalid_or_lfs(model_path):
+            model_path = "yolov8n.pt"
 
         # Jetson / TensorRT auto-fallback: if we requested a .pt but a .engine exists, use it.
         engine_path = model_path.replace('.pt', '.engine')
@@ -94,7 +131,11 @@ class PPEDetector:
             log.info("Found TensorRT engine at %s, preferring it for max performance.", engine_path)
             model_path = engine_path
 
-        self.model       = YOLO(model_path)
+        try:
+            self.model = YOLO(model_path)
+        except Exception as load_err:
+            log.warning("Failed to load model %s (%s), loading official yolov8n.pt", model_path, load_err)
+            self.model = YOLO("yolov8n.pt")
         self.default_zone = zone
 
         # Dynamically register all model non-person class names into ALL_PPE_CLASSES
@@ -181,7 +222,8 @@ class PPEDetector:
 
         # ── Stage 1+2: detect + track (raw frame — no enhancer for speed) ────
         try:
-            results = self.model.track(
+            results = _run_model_track(
+                self.model,
                 frame,
                 persist=True,
                 tracker=config.TRACKER_CONFIG,
@@ -192,7 +234,8 @@ class PPEDetector:
             )
         except Exception as track_err:
             log.warning("Tracking fallback to predict due to tracker error: %s", track_err)
-            results = self.model.predict(
+            results = _run_model_predict(
+                self.model,
                 frame,
                 conf=config.DETECTION_CONF,
                 imgsz=config.INFERENCE_IMG_SIZE,

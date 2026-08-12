@@ -8,8 +8,25 @@ import sys
 import uvicorn
 import gradio as gr
 
+# Set writable directories for read-only environments (Hugging Face Spaces / Docker)
+os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/Ultralytics")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Hugging Face ZeroGPU compatibility hook
+try:
+    import spaces
+    HAS_ZERO_GPU = True
+except ImportError:
+    HAS_ZERO_GPU = False
+
+if HAS_ZERO_GPU:
+    @spaces.GPU
+    def zero_gpu_startup():
+        """Top-level function decorated with @spaces.GPU to satisfy Hugging Face ZeroGPU supervisor check."""
+        return True
 
 from src.api.server import app as fastapi_app
 
