@@ -271,16 +271,33 @@ class ThreadedCamera:
                                     time.sleep(0.1)
                         else:
                             # Physical webcam or RTSP live stream: Zero-Lag Buffer Flush
-                            grabbed = self.cap.grab()
-                            if grabbed:
-                                ok, frame = self.cap.retrieve()
-                                if ok and frame is not None:
-                                    with self.lock:
-                                        self.latest_frame = frame
+                            try:
+                                grabbed = self.cap.grab()
+                                if grabbed:
+                                    self._failed_grabs = getattr(self, "_failed_grabs", 0) * 0  # reset
+                                    ok, frame = self.cap.retrieve()
+                                    if ok and frame is not None:
+                                        with self.lock:
+                                            self.latest_frame = frame
+                                    else:
+                                        time.sleep(0.005)
                                 else:
-                                    time.sleep(0.005)
-                            else:
+                                    self._failed_grabs = getattr(self, "_failed_grabs", 0) + 1
+                                    if self._failed_grabs > 50:  # ~2.5 seconds of failures
+                                        log.warning("Live stream disconnected. Attempting to reconnect...")
+                                        new_cap = open_camera_source(self.source)
+                                        if new_cap and new_cap.isOpened():
+                                            try:
+                                                self.cap.release()
+                                            except Exception:
+                                                pass
+                                            self.cap = new_cap
+                                            self._failed_grabs = 0
+                                    time.sleep(0.05)
+                            except Exception as live_err:
+                                log.debug("Live stream grab error: %s", live_err)
                                 time.sleep(0.05)
+
 
                     if is_yt_or_file and ok and frame is not None:
                         elapsed = time.time() - t0
