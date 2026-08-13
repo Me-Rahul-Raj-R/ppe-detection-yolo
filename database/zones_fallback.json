@@ -1,6 +1,6 @@
 [
   {
-    "id": "ZONE-01",
+    "id": "general-plant",
     "name": "general_plant",
     "description": "General plant area \u2013 helmet and vest required",
     "required_ppe": [
@@ -17,7 +17,7 @@
     ]
   },
   {
-    "id": "ZONE-02",
+    "id": "construction",
     "name": "construction",
     "description": "Active construction \u2013 helmet, vest, boots required",
     "required_ppe": [
@@ -34,14 +34,14 @@
     ]
   },
   {
-    "id": "ZONE-03",
+    "id": "work-at-height",
     "name": "work_at_height",
     "description": "Elevated work area \u2013 full harness system required",
     "required_ppe": [
       "helmet",
       "vest",
-      "boots",
       "safety_belt",
+      "lanyard",
       "hook"
     ]
   },
