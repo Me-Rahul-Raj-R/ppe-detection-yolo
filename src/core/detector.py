@@ -213,7 +213,7 @@ class PPEDetector:
                 tracker=config.TRACKER_CONFIG,
                 conf=config.DETECTION_CONF,
                 imgsz=config.INFERENCE_IMG_SIZE,
-                half=config.INFERENCE_HALF_PRECISION,
+                quantize=config.INFERENCE_HALF_PRECISION,
                 verbose=False,
             )
         except Exception as track_err:
@@ -223,7 +223,7 @@ class PPEDetector:
                 frame,
                 conf=config.DETECTION_CONF,
                 imgsz=config.INFERENCE_IMG_SIZE,
-                half=config.INFERENCE_HALF_PRECISION,
+                quantize=config.INFERENCE_HALF_PRECISION,
                 verbose=False,
             )
 
