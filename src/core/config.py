@@ -22,7 +22,7 @@ DEFAULT_MODEL_PATH  = os.getenv(
     "models/best.pt" if os.path.exists("models/best.pt") else "best.pt"
 )
 FALLBACK_MODEL_PATH = os.getenv("FALLBACK_MODEL_PATH", "yolov8n.pt")
-DETECTION_CONF      = float(os.getenv("DETECTION_CONF", "0.20"))
+DETECTION_CONF      = float(os.getenv("DETECTION_CONF", "0.35"))
 TRACKER_CONFIG      = "bytetrack.yaml"
 
 import torch

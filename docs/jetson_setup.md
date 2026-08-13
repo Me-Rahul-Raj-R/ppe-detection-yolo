@@ -68,10 +68,10 @@ scp user@dev-machine:ppe_training/custom_model/weights/best.onnx \
     /opt/ppe_monitor/ppe_training/custom_model/weights/
 ```
 
-Then build the TensorRT engine on the Jetson (see `docs/tensorrt_instructions.md`):
+Then build the TensorRT engine on the Jetson (see `docs/TENSORRT_GUIDE.md`):
 ```bash
 cd /opt/ppe_monitor
-python3 export_tensorrt.py --model ppe_training/custom_model/weights/best.pt
+python3 scripts/export_tensorrt.py --model ppe_training/custom_model/weights/best.pt
 ```
 
 ---
@@ -164,5 +164,5 @@ sudo jtop
 ## Updating the model
 
 1. Copy new `best.pt` and `best.onnx` to `/opt/ppe_monitor/ppe_training/custom_model/weights/`
-2. Rebuild the TensorRT engine: `python3 export_tensorrt.py`
+2. Rebuild the TensorRT engine: `python3 scripts/export_tensorrt.py`
 3. Restart the service: `sudo systemctl restart ppe_monitor`

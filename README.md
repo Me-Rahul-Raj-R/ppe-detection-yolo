@@ -2,10 +2,9 @@
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org)
-[![YOLOv8](https://img.shields.io/badge/YOLO-v8%20%2F%20v11-00FFFF.svg?style=flat)](https://ultralytics.com)
+[![YOLOv11](https://img.shields.io/badge/YOLO-v11-00FFFF.svg?style=flat)](https://ultralytics.com)
 [![React](https://img.shields.io/badge/React-18+-61DAFB.svg?style=flat&logo=react)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?style=flat&logo=typescript)](https://www.typescriptlang.org)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.3+-38B2AC.svg?style=flat&logo=tailwindcss)](https://tailwindcss.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **EdgeVision** is an enterprise-grade, high-throughput autonomous computer vision system designed for real-time Personal Protective Equipment (PPE) compliance verification, worker tracking, and industrial safety telemetry across plant floors, construction zones, and high-hazard environments.
 
@@ -14,7 +13,7 @@
 ## 🌟 Key Features
 
 * **⚡ Parallel Multi-Camera Vision Engine**: Runs asynchronous parallel YOLO inference threads across hardware webcams, RTSP streams, and YouTube Live links simultaneously.
-* **🎥 YouTube Live & Stream Link Monitoring**: Directly streams YouTube live feeds or video links on-the-fly without downloading files or requiring user sign-in. Supports Netscape `cookies.txt` and mobile API fallback.
+* **🎥 Network Resilient Streams**: Features auto-reconnect fallback loops for UDP/TCP stream drops and robust TLS/HLS support without crashing or stalling.
 * **🎯 Custom Zone Rule Engine**: Per-zone granular PPE enforcement (`helmet`, `vest`, `boots`, `gloves`, `goggles`, `ear-mufs`, `face-guard`, `safety_belt`, `lanyard`, `hook`).
 * **⏳ Temporal Compliance & Noise Suppression**: Multi-frame thresholding and minimum dwell-time verification suppress false single-frame alerts before raising real incident violations.
 * **💾 Dual Storage Persistence**: Hybrid database engine (MongoDB Atlas cloud primary + local JSON disk fallback) ensuring zero data loss even during network disconnections.
@@ -26,35 +25,19 @@
 ## 📁 Repository Structure
 
 ```text
-PPE DETECTION/
-├── database/
-│   ├── cameras_fallback.json    # Local JSON fallback store for camera configs
-│   ├── zones_fallback.json      # Local JSON fallback store for zone rules
-│   └── evidence/                # Violation JPEG snapshots & MP4 video clips
+EdgeVision/
+├── database/                    # Local JSON fallbacks & violation snapshots
+├── docs/                        # Architecture, Deployment, and User Guides
 ├── frontend/                    # React SPA Frontend (Vite + TanStack Router)
-│   ├── src/
-│   │   ├── components/         # Shared UI Shell & Layout components
-│   │   ├── hooks/              # Custom hooks & session cache manager
-│   │   ├── routes/             # Route views (Live, Cameras, Zones, Violations, Reports)
-│   │   └── lib/                # Telemetry types & global DataContext provider
-│   ├── package.json
-│   └── vite.config.ts
 ├── models/                      # YOLO AI Model Weights (Tracked in GitHub)
-│   ├── best.pt                  # Primary trained industrial PPE detection model
-│   └── yolo11n.pt               # Fallback YOLO lightweight model
-├── src/                         # Python Backend Engine
-│   ├── api/
-│   │   └── server.py           # FastAPI Application, WebSockets & REST API
-│   ├── core/
-│   │   ├── config.py           # System parameters & profiles
-│   │   ├── db.py               # Hybrid MongoDB & local JSON persistence manager
-│   │   ├── detector.py         # YOLO object detection wrapper
-│   │   ├── rule_engine.py      # Spatial & zone compliance evaluator
-│   │   └── temporal_validator.py# Multi-frame noise suppression
+├── scripts/                     # ONNX/TensorRT Export & DB Utility Scripts
+├── src/                         # Core Python Backend Engine
+│   ├── api/                     # FastAPI Application, WebSockets & REST API
+│   └── core/                    # Inference logic, Rule Engine & Tracking
+├── training/                    # YOLOv11 Custom Training Pipelines
 ├── tests/                       # Unit test suite
 ├── start_fullstack.bat          # One-click startup script for Windows
 ├── requirements.txt             # Python dependencies
-├── bytetrack.yaml               # ByteTrack multi-object tracking configuration
 └── README.md
 ```
 
@@ -65,13 +48,13 @@ PPE DETECTION/
 ### Prerequisites
 * **Python**: 3.10 or higher
 * **Node.js**: v18.0 or higher
-* **Git** & **CUDA-compatible GPU** *(optional, CPU fallback supported)*
+* **Git** & **CUDA-compatible GPU** *(highly recommended for FP16 inference)*
 
-### 1. Clone & Install Backend Dependencies
+### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-org/ppe-detection.git
-cd "ppe-detection"
+git clone https://github.com/your-org/edgevision-ppe.git
+cd "edgevision-ppe"
 
 # Create virtual environment
 python -m venv .venv
@@ -97,7 +80,7 @@ Double-click **`start_fullstack.bat`** or run in terminal:
 start_fullstack.bat
 ```
 
-#### Manual Startup:
+#### Manual Startup (Cross-Platform):
 ```bash
 # Terminal 1: Backend Server (Port 8000)
 python -m src.api.server
@@ -111,49 +94,14 @@ Open your browser at **`http://localhost:3000`** to access the dashboard.
 
 ---
 
-## ☁️ Cloud Deployment (Render)
+## 📚 Documentation & Guides
 
-Deploy EdgeVision effortlessly to **Render** in 1-click:
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
-
-1. Push your repository to **GitHub**.
-2. Go to **Render Dashboard** > **New +** > **Blueprint**.
-3. Select your repository — Render automatically uses `render.yaml` to build and launch the app.
-4. Add your `MONGODB_URI` environment variable for cloud database persistence.
-
-For detailed step-by-step instructions, see **[RENDER_DEPLOYMENT.md](file:///d:/PROJECTS/PPE%20DETECTION/RENDER_DEPLOYMENT.md)**.
-
----
-
-
-## 📡 REST API Reference
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `GET /api/cameras` | `GET` | Retrieve registered camera feeds & live pipeline status |
-| `POST /api/cameras` | `POST` | Register a new webcam, RTSP, or YouTube stream feed |
-| `POST /api/cameras/{id}/activate` | `POST` | Reconnect & initialize vision pipeline for target camera |
-| `DELETE /api/cameras/{id}` | `DELETE` | Remove camera configuration from database |
-| `GET /api/zones` | `GET` | List safety zones & enforced PPE requirements |
-| `POST /api/zones` | `POST` | Create or update zone safety rules & PPE requirements |
-| `GET /api/violations` | `GET` | Query historical incident logs & filter evidence media |
-| `POST /api/violations/{id}/acknowledge` | `POST` | Acknowledge or decline violation incident |
-| `GET /api/stats` | `GET` | Dashboard real-time telemetry summary |
-| `GET /stream?camera_id={id}` | `GET` | Live MJPEG video stream with bounding boxes |
-| `WS /ws` | `WS` | WebSocket endpoint for real-time annotated frame streaming |
-
----
-
-## 📹 YouTube Live Stream & Video Setup
-
-1. Navigate to **Camera Registry** (`/cameras`).
-2. Click **`+ Register new camera / stream`**.
-3. Select **Source Type**: `YouTube Video / Live Link`.
-4. Paste the YouTube URL (e.g., `https://www.youtube.com/watch?v=...` or `https://youtu.be/...`).
-5. Select target **Safety Zone** and click **`Add Camera & Connect Stream`**.
-
-> **Note**: For age-restricted or protected feeds, place your Netscape-formatted `cookies.txt` file in the project root. The backend will automatically pass `"cookiefile": "cookies.txt"` to `yt_dlp`.
+Comprehensive documentation is available in the `docs/` folder:
+- **[Architecture Overview](docs/ARCHITECTURE.md)**: System design and components.
+- **[User Guide](docs/user_guide.md)**: Using the dashboard and rule engine.
+- **[Jetson Nano / Orin Deployment](docs/jetson_setup.md)**: Instructions for Edge deployment.
+- **[TensorRT Optimization](docs/TENSORRT_GUIDE.md)**: Achieving 30+ FPS on embedded devices via ONNX/TensorRT.
+- **[Dataset & Training](docs/dataset_guide.md)**: How to train the model on custom industrial datasets.
 
 ---
 
@@ -163,7 +111,7 @@ For detailed step-by-step instructions, see **[RENDER_DEPLOYMENT.md](file:///d:/
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/?appName=Cluster0
 MONGODB_DB_NAME=edgevision
 MODEL_PATH=models/best.pt
-DETECTION_CONF=0.20
+DETECTION_CONF=0.35
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 ```
@@ -172,13 +120,4 @@ SERVER_PORT=8000
 
 ## 📜 License & Compliance
 
-Developed for enterprise workplace safety monitoring. Compliance rules adhere to OSHA and ISO 45001 occupational health and safety management guidelines.
-
-
-## ONNX FORMAT
-
-On NVIDIA Jetson boards, the ONNX (Open Neural Network Exchange) format acts as a standard bridge. You convert trained models from PyTorch or TensorFlow into .onnx files, then optimize them into TensorRT engine files to run fast AI inference on the device GPU
-
-## Jetson
-
-NVIDIA Jetson is a leading series of low-power, compact embedded computing boards designed for accelerating edge AI, computer vision, and robotics. It runs specialized software like the NVIDIA JetPack SDK to power autonomous machines, drones, and smart devices.
+Licensed under the MIT License. Developed for enterprise workplace safety monitoring. Compliance rules adhere to OSHA and ISO 45001 occupational health and safety management guidelines.

@@ -57,6 +57,9 @@ def open_camera_source(source: str) -> cv2.VideoCapture | None:
     """Helper to open webcam indices, RTSP URLs, HTTP video feeds, video files, or YouTube streams with robust fallback."""
     src_str = str(source).strip()
     cap = None
+    
+    # Apply FFmpeg network resilience options globally for OpenCV video capture
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|reconnect;1|reconnect_streamed;1|reconnect_delay_max;5|stimeout;10000000|timeout;10000000"
 
     if src_str.isdigit():
         idx = int(src_str)
@@ -76,9 +79,84 @@ def open_camera_source(source: str) -> cv2.VideoCapture | None:
                 pass
     elif "youtube.com" in src_str or "youtu.be" in src_str:
         try:
+<<<<<<< HEAD
             # pyrefly: ignore [missing-import]
             from cap_from_youtube import cap_from_youtube
             cap = cap_from_youtube(src_str, "720p")
+=======
+            import yt_dlp
+            cookie_paths = [
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cookies.txt"),
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "database", "cookies.txt"),
+                "cookies.txt"
+            ]
+            cookie_file = next((p for p in cookie_paths if os.path.isfile(p)), None)
+
+            ydl_opts = {
+                "format": "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+                "quiet": True,
+                "no_warnings": True,
+                "nocheckcertificate": True,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android", "ios", "mweb"]
+                    }
+                }
+            }
+            if cookie_file:
+                ydl_opts["cookiefile"] = cookie_file
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(src_str, download=False)
+                url = info.get("url")
+                if not url and info.get("formats"):
+                    # Find highest format under 720p or fallback to last
+                    fmt = next((f for f in reversed(info["formats"]) if f.get("url") and f.get("height", 0) <= 720), info["formats"][-1])
+                    url = fmt.get("url")
+                if url:
+                    c = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+                    if c and c.isOpened():
+                        ok, test_frame = c.read()
+                        if ok and test_frame is not None:
+                            log.info("Successfully opened YouTube stream URL: %s", src_str)
+                            cap = c
+        except Exception as e:
+            log.warning("yt_dlp extraction warning for %s: %s", src_str, e)
+
+        # Fallback to cap_from_youtube if direct extraction fails
+        if cap is None or not cap.isOpened():
+            try:
+                from cap_from_youtube import cap_from_youtube
+                c = cap_from_youtube(src_str, "720p")
+                if c and c.isOpened():
+                    cap = c
+            except Exception as err:
+                log.warning("cap_from_youtube fallback warning: %s", err)
+    elif src_str.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        try:
+            ff_params = []
+            if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
+                ff_params.extend([cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000])
+            if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
+                ff_params.extend([cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000])
+
+            c = cv2.VideoCapture(src_str, cv2.CAP_FFMPEG, ff_params) if ff_params else cv2.VideoCapture(src_str, cv2.CAP_FFMPEG)
+            if c and c.isOpened():
+                ok, test_frame = c.read()
+                if ok and test_frame is not None:
+                    log.info("Successfully opened network stream: %s", src_str)
+                    cap = c
+                else:
+                    c.release()
+        except Exception as err:
+            log.warning("FFmpeg network stream connection error for %s: %s", src_str, err)
+
+    if (cap is None or not cap.isOpened()) and not src_str.isdigit() and not src_str.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        try:
+            c = cv2.VideoCapture(src_str)
+            if c and c.isOpened():
+                cap = c
+>>>>>>> c648ded3d0c266bbce7114835ca2d8469cd9429a
         except Exception:
             pass
         if cap is None or not cap.isOpened():
@@ -173,8 +251,46 @@ class ThreadedCamera:
                             except Exception:
                                 pass
                         else:
+<<<<<<< HEAD
                             # Reconnection retry for RTSP/webcam stream
                             time.sleep(0.05)
+=======
+                            # Physical webcam or RTSP live stream: Zero-Lag Buffer Flush
+                            try:
+                                grabbed = self.cap.grab()
+                                if grabbed:
+                                    self._failed_grabs = getattr(self, "_failed_grabs", 0) * 0  # reset
+                                    ok, frame = self.cap.retrieve()
+                                    if ok and frame is not None:
+                                        with self.lock:
+                                            self.latest_frame = frame
+                                    else:
+                                        time.sleep(0.005)
+                                else:
+                                    self._failed_grabs = getattr(self, "_failed_grabs", 0) + 1
+                                    if self._failed_grabs > 50:  # ~2.5 seconds of failures
+                                        log.warning("Live stream disconnected. Attempting to reconnect...")
+                                        new_cap = open_camera_source(self.source)
+                                        if new_cap and new_cap.isOpened():
+                                            try:
+                                                self.cap.release()
+                                            except Exception:
+                                                pass
+                                            self.cap = new_cap
+                                            self._failed_grabs = 0
+                                    time.sleep(0.05)
+                            except Exception as live_err:
+                                log.debug("Live stream grab error: %s", live_err)
+                                time.sleep(0.05)
+
+
+                    if is_yt_or_file and ok and frame is not None:
+                        elapsed = time.time() - t0
+                        sleep_time = frame_interval - elapsed
+                        if sleep_time > 0:
+                            time.sleep(sleep_time)
+
+>>>>>>> c648ded3d0c266bbce7114835ca2d8469cd9429a
                 except Exception as err:
                     log.debug("Threaded camera loop exception: %s", err)
                     time.sleep(0.02)
